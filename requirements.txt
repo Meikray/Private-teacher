@@ -1,0 +1,14 @@
+# Bibliothèques Python nécessaires à l'application.
+# Installation (dans un environnement virtuel) : pip install -r requirements.txt
+# « >= » signifie : cette version ou une version plus récente.
+
+# Serveur web : définit les routes de l'API (ex. /chat).
+fastapi>=0.110
+# Programme qui fait tourner le serveur FastAPI.
+uvicorn>=0.29
+# Bibliothèque officielle pour communiquer avec l'API Claude.
+anthropic>=0.40
+# Lit le fichier .env (la clé API n'est jamais écrite dans le code).
+python-dotenv>=1.0
+# Tests automatiques.
+pytest>=8.0

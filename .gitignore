@@ -1,0 +1,17 @@
+# Fichiers que Git ne doit JAMAIS enregistrer ni envoyer sur GitHub.
+# Chaque ligne est un « motif » : tous les fichiers qui correspondent sont ignorés.
+
+# --- Secrets (section 33) ---
+# Le fichier .env contient la clé API : il reste uniquement sur ta machine.
+.env
+
+# --- Données personnelles (section 20) ---
+# Ta base SQLite (ton profil pédagogique) reste sur ta machine.
+*.db
+data/
+
+# --- Python ---
+# Environnement virtuel : les paquets installés, recréables à tout moment.
+.venv/
+# Fichiers temporaires créés automatiquement par Python.
+__pycache__/

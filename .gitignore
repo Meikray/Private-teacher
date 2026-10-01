@@ -15,3 +15,5 @@ data/
 .venv/
 # Fichiers temporaires créés automatiquement par Python.
 __pycache__/
+# Cache temporaire créé par pytest lors des tests.
+.pytest_cache/

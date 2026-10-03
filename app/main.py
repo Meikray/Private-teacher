@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 # Chemin du dossier static/, calculé à partir de l'emplacement de ce fichier.
 # Path(__file__) = ce fichier (app/main.py) ; .parent = le dossier app/ ;
@@ -39,3 +40,22 @@ def health():
 def page_accueil():
     # FileResponse renvoie un fichier tel quel au navigateur.
     return FileResponse(DOSSIER_STATIC / "index.html")
+
+
+# Forme des données reçues : un objet JSON avec un champ "message".
+# Si la page envoie autre chose, FastAPI refuse automatiquement la requête.
+class MessageEleve(BaseModel):
+    message: str
+
+
+# Forme des données renvoyées : un objet JSON avec un champ "reponse".
+class ReponseProfesseur(BaseModel):
+    reponse: str
+
+
+# @app.post (et non @app.get) : la page ENVOIE des données au serveur.
+# Pour l'instant, le serveur renvoie simplement le message (un « écho »),
+# pour vérifier que la page et le serveur communiquent bien.
+@app.post("/chat")
+def chat(donnees: MessageEleve) -> ReponseProfesseur:
+    return ReponseProfesseur(reponse="Tu as écrit : " + donnees.message)

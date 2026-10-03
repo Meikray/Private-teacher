@@ -9,7 +9,7 @@ import anthropic
 import httpx2
 from fastapi.testclient import TestClient
 
-from app import ia
+from app import ia, memoire
 from app.main import app
 
 # TestClient est un « faux navigateur » qui interroge le serveur
@@ -23,7 +23,7 @@ CONVERSATION = {
 
 def test_chat_renvoie_la_reponse_du_professeur(monkeypatch):
     # Faux professeur : il renvoie toujours la même phrase.
-    def faux_professeur(historique):
+    def faux_professeur(historique, **reglages):
         return "Bonne question ! À ton avis, à quoi sert une boîte ?"
 
     monkeypatch.setattr(ia, "demander_au_professeur", faux_professeur)
@@ -31,8 +31,45 @@ def test_chat_renvoie_la_reponse_du_professeur(monkeypatch):
     response = client.post("/chat", json=CONVERSATION)
     assert response.status_code == 200
     assert response.json() == {
-        "reponse": "Bonne question ! À ton avis, à quoi sert une boîte ?"
+        "reponse": "Bonne question ! À ton avis, à quoi sert une boîte ?",
+        "concepts_mis_a_jour": [],
     }
+
+
+def test_chat_transmet_le_mode_et_le_profil(monkeypatch):
+    recu = {}
+
+    def faux_professeur(historique, **reglages):
+        recu.update(reglages)
+        return "ok"
+
+    monkeypatch.setattr(ia, "demander_au_professeur", faux_professeur)
+
+    donnees = {**CONVERSATION, "mode": "examen", "recherche_web": True}
+    assert client.post("/chat", json=donnees).status_code == 200
+    assert "MODE EXAMEN" in recu["contexte"]
+    assert "PROFIL PÉDAGOGIQUE" in recu["contexte"]
+    assert recu["recherche_web"] is True
+
+
+def test_chat_enregistre_la_progression(monkeypatch):
+    # Le faux professeur « appelle l'outil » comme le ferait Claude.
+    def faux_professeur(historique, executer_outil, **reglages):
+        executer_outil("enregistrer_progression", {
+            "concepts": [{"id": "variable", "etat": 3, "remarque": "bien expliqué"}],
+            "erreurs": [],
+            "niveau_aide": 2,
+            "exercice": "aucun",
+            "demande_solution_directe": False,
+        })
+        return "ok"
+
+    monkeypatch.setattr(ia, "demander_au_professeur", faux_professeur)
+
+    response = client.post("/chat", json=CONVERSATION)
+    assert response.json()["concepts_mis_a_jour"] == ["variable"]
+    etats = {c["id"]: c["etat"] for c in memoire.lister_concepts()}
+    assert etats["variable"] == 3
 
 
 def test_chat_refuse_le_role_system():
@@ -48,9 +85,14 @@ def test_chat_refuse_une_requete_sans_historique():
     assert response.status_code == 422
 
 
+def test_chat_refuse_un_mode_inconnu():
+    response = client.post("/chat", json={**CONVERSATION, "mode": "triche"})
+    assert response.status_code == 422
+
+
 def test_chat_erreur_de_connexion(monkeypatch):
     # Faux professeur qui simule une coupure d'Internet.
-    def professeur_injoignable(historique):
+    def professeur_injoignable(historique, **reglages):
         requete = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
         raise anthropic.APIConnectionError(request=requete)
 
@@ -63,7 +105,7 @@ def test_chat_erreur_de_connexion(monkeypatch):
 
 def test_chat_cle_api_absente(monkeypatch):
     # Faux professeur qui simule une clé API introuvable.
-    def professeur_sans_cle(historique):
+    def professeur_sans_cle(historique, **reglages):
         raise anthropic.AnthropicError("Clé API introuvable")
 
     monkeypatch.setattr(ia, "demander_au_professeur", professeur_sans_cle)

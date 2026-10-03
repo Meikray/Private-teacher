@@ -7,9 +7,13 @@ fastapi>=0.110
 # Programme qui fait tourner le serveur FastAPI.
 uvicorn>=0.29
 # Bibliothèque officielle pour communiquer avec l'API Claude.
-anthropic>=0.40
+anthropic>=1.11
 # Lit le fichier .env (la clé API n'est jamais écrite dans le code).
 python-dotenv>=1.0
+# Lit le texte des documents PDF importés.
+pypdf>=5.0
+# Permet à FastAPI de recevoir des fichiers envoyés par la page (import de cours).
+python-multipart>=0.0.9
 # Tests automatiques.
 pytest>=8.0
 # Utilisé par le TestClient de FastAPI pour simuler des requêtes dans les tests.

@@ -17,16 +17,24 @@ function echapper(texte) {
 }
 
 // Mise en forme à l'intérieur d'une ligne (texte déjà échappé).
+// Le code en ligne `...` est traité à part : son contenu n'est jamais mis en
+// forme (sinon « int *p » pourrait devenir de l'italique).
 function enLigne(texte) {
   return texte
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-    // Liens : seulement http(s), ouverts dans un nouvel onglet.
-    .replace(
-      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
-    );
+    .split(/(`[^`]+`)/)
+    .map((morceau, i) =>
+      i % 2 === 1
+        ? "<code>" + morceau.slice(1, -1) + "</code>"
+        : morceau
+            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+            .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, "$1<em>$2</em>")
+            // Liens : seulement http(s), ouverts dans un nouvel onglet.
+            .replace(
+              /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+              '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+            )
+    )
+    .join("");
 }
 
 export function markdownVersHtml(source) {

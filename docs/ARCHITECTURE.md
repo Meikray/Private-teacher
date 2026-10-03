@@ -1,8 +1,8 @@
 # Architecture de l'Assistant Professeur Personnel
 
 Ce document est la « carte » du projet. Il explique à quoi sert chaque partie
-de l'application, pourquoi chaque technologie a été choisie, et dans quel ordre
-le projet sera construit.
+de l'application, pourquoi chaque technologie a été choisie, et **comment
+faire évoluer le projet**.
 
 > Rappel : ce projet est aussi un outil d'apprentissage. Chaque partie doit
 > rester lisible et compréhensible par un débutant (section 34 du cahier des charges).
@@ -15,139 +15,194 @@ L'application est découpée en modules indépendants. Chaque module a **une seu
 responsabilité**. C'est ce qu'on appelle la *séparation des responsabilités* :
 si un module change, les autres ne sont pas cassés.
 
-| Module | Rôle | Technologie |
-|---|---|---|
-| **Interface (frontend)** | Ce que tu vois : la fenêtre de discussion, les boutons, le tableau de bord. | HTML, CSS, JavaScript |
-| **Serveur (backend)** | Reçoit les messages de l'interface, les transmet aux bons modules, renvoie les réponses. | Python + FastAPI |
-| **Agent pédagogique** | Le « cerveau » du professeur : identifie ton intention, choisit le niveau d'aide (mode socratique), prépare les consignes envoyées à l'IA. | Python |
-| **Module IA** | Envoie la demande au modèle d'IA et récupère sa réponse. Isolé pour pouvoir changer de fournisseur plus tard. | API Claude (Anthropic) |
-| **Mémoire pédagogique** | Garde ton profil : concepts maîtrisés, fragiles, erreurs fréquentes, progression. | SQLite |
-| **Documents / RAG** *(plus tard)* | Recherche dans tes cours, PDF et notes. | Python |
-| **Voix** *(plus tard)* | Microphone → texte → professeur → synthèse vocale. | À choisir le moment venu |
-| **Connecteurs** *(plus tard)* | Sources externes (documentation web, GitHub, etc.), ajoutées une par une. | À choisir le moment venu |
+### Serveur (Python, dossier `app/`)
+
+| Fichier | Rôle |
+|---|---|
+| `main.py` | Les **routes** de l'API (les adresses comme `/chat`). Il ne fait que relier les modules. |
+| `ia.py` | Le **seul** fichier qui parle à Claude : modèle, effort, option de secours, boucle d'outils. |
+| `consignes.py` | Les consignes générales du professeur (le « prompt système »). |
+| `modes.py` | Le **registre des modes** : socratique, cours, explication de code, débogage, exercice, examen, diagnostic, révision, projet, plan d'étude. |
+| `parcours.py` | La **carte des connaissances** : domaines, concepts, prérequis, 7 états de maîtrise. |
+| `memoire.py` | La **mémoire pédagogique** locale (SQLite) : états, erreurs, aides, révisions, profil, tableau de bord. |
+| `documents.py` | Les **documents de cours** : import (PDF, texte, code), extraction du texte, recherche de passages. |
+
+### Interface (navigateur, dossier `static/`)
+
+| Fichier | Rôle |
+|---|---|
+| `index.html` / `style.css` | Structure et apparence (thème sombre et clair automatiques). |
+| `js/main.js` | Point d'entrée : démarre chaque partie. |
+| `js/chat.js` | La discussion : historique, choix du mode, affichage des réponses. |
+| `js/carte.js` | La carte des connaissances : fiche d'un concept, légende, version en liste de secours. |
+| `js/carte3d.js` | La **scène 3D** (Three.js) : îlots, sphères, liens de prérequis. |
+| `js/panneaux.js` | Tableau de bord, Ma mémoire, Documents, Réglages. |
+| `js/voix.js` | Dictée au micro et lecture vocale. |
+| `js/markdown.js` | Mise en forme sûre des réponses (protection XSS). |
+| `js/api.js` | Requêtes vers le serveur et « bus d'événements » entre modules. |
+| `js/reglages.js` | Réglages gardés dans le navigateur. |
+| `vendor/three/` | La bibliothèque 3D Three.js 0.160.0 (licence MIT), incluse pour fonctionner hors ligne. |
 
 ---
 
 ## 2. Trajet d'une question
 
-Voici ce qui se passe quand tu poses une question au professeur :
-
 ```
-  Toi
-   │  tu écris : « Pourquoi mon programme ne fonctionne pas ? »
+  Toi : « Pourquoi ma boucle ne s'arrête pas ? »
+   │
    ▼
-┌──────────────────┐
-│  Interface web   │  (HTML/CSS/JS dans ton navigateur)
-└────────┬─────────┘
-         │  requête HTTP (JSON)
-         ▼
-┌──────────────────┐
-│ Serveur FastAPI  │  (Python)
-└────────┬─────────┘
-         ▼
-┌──────────────────┐      lit / écrit      ┌───────────────────┐
-│ Agent pédagogique│ ◄──────────────────► │ Mémoire (SQLite)   │
-│ - intention      │                       │ ton profil         │
-│ - niveau d'aide  │                       └───────────────────┘
-└────────┬─────────┘
-         │  consignes + ta question
-         ▼
-┌──────────────────┐
-│    Module IA     │ ──► API Claude (sur Internet)
-└────────┬─────────┘
-         │  réponse
-         ▼
-   Serveur ──► Interface ──► Toi
+┌──────────────────────┐   historique + mode + réglages (JSON)
+│ Interface (chat.js)  │ ─────────────────────────────────────┐
+└──────────────────────┘                                      ▼
+                                                   ┌────────────────────┐
+                                                   │ Serveur (main.py)  │
+                                                   └─────────┬──────────┘
+            ┌────────────────────────────┬──────────────────┤
+            ▼                            ▼                  ▼
+   consigne du mode (modes.py)   profil (memoire.py)   extraits de cours
+                                                       (documents.py)
+            └────────────────────────────┴──────────────────┘
+                                         │ contexte
+                                         ▼
+                              ┌─────────────────────┐
+                              │  Module IA (ia.py)  │ ──► API Claude
+                              └─────────┬───────────┘ ◄── réponse
+                                        │
+              Claude appelle l'outil « enregistrer_progression »
+                                        │
+                                        ▼
+                              mémoire mise à jour (SQLite)
+                                        │
+                                        ▼
+   Interface : réponse affichée + carte 3D et tableau de bord rafraîchis
 ```
 
-Point important : l'IA ne décide pas seule de son comportement. C'est l'**agent
-pédagogique** qui lui indique comment répondre (par exemple : « donne seulement
-un indice de niveau 2, pas la solution »).
+Points importants :
+
+- L'IA ne décide pas seule de son comportement : les **consignes** et le
+  **mode** lui disent comment répondre (par exemple « donne seulement un indice »).
+- La page garde l'**historique** et l'envoie en entier, car l'API Claude ne
+  retient rien entre deux messages.
+- La **mémoire** est mise à jour par Claude lui-même, grâce à un **outil**
+  (`enregistrer_progression`) : quand il observe que tu as compris ou que tu
+  bloques, il l'enregistre.
 
 ---
 
 ## 3. Pourquoi ces choix ?
 
-### Python pour le backend
-- **Choisi parce que :** syntaxe lisible pour un débutant, très utilisé en IA et
-  pour lire des documents (PDF, texte), cité dans le cahier des charges.
-- **Alternative écartée :** JavaScript / Node.js. Avantage : un seul langage
-  partout. Inconvénient : l'asynchronisme est plus déroutant au début.
+### Python + FastAPI pour le serveur
+- **Choisi parce que :** lisible pour un débutant, très utilisé en IA, et
+  FastAPI vérifie automatiquement la forme des données reçues.
+- **Alternatives :** Node.js (un seul langage, mais l'asynchronisme est plus
+  déroutant), Flask (plus ancien), Django (plus lourd).
 
-### FastAPI pour le serveur
-- **Choisi parce que :** simple, moderne, bien documenté, et il génère
-  automatiquement une page qui décrit toutes les routes de l'API.
-- **Alternatives :** Flask (plus ancien, aussi simple), Django (plus complet mais
-  beaucoup plus lourd pour un débutant).
-
-### HTML / CSS / JavaScript pour l'interface
+### HTML / CSS / JavaScript (sans framework) pour l'interface
 - **Choisi parce que :** on voit clairement comment le frontend et le backend
-  communiquent (section 52). Aucune bibliothèque compliquée au départ.
-- **Alternative écartée :** Streamlit. Plus rapide à écrire, mais cache le
-  fonctionnement du web et devient limitant ensuite.
+  communiquent (section 52), sans couche cachée.
+- **Alternatives :** React ou Vue (puissants, mais beaucoup de notions en plus
+  pour un débutant), Streamlit (cache le fonctionnement du web).
 
-### API Claude pour le professeur
-- **Choisi parce que :** bon niveau en explication et en code.
-- **Prévu :** le module IA est isolé, donc on pourra changer de fournisseur
-  sans réécrire le reste de l'application.
+### Three.js pour la 3D
+- **Choisi parce que :** c'est la bibliothèque 3D la plus utilisée et la mieux
+  documentée pour le navigateur (WebGL).
+- **Copiée dans le projet** (`static/vendor/three`) plutôt que chargée depuis
+  Internet : l'application fonctionne hors ligne et ne contacte aucun serveur
+  extérieur.
+
+### Claude Opus 5.5 pour le professeur
+- **Choisi par l'élève** pour la finesse pédagogique.
+- Effort `medium`, option de secours `fallbacks="default"`.
+- Isolé dans `ia.py` : changer de modèle = changer la variable `MODELE`.
 
 ### SQLite pour la mémoire
 - **Choisi parce que :** une base de données dans un simple fichier, rien à
   installer, et tes données restent **sur ta machine** (section 20).
-- **Alternative :** PostgreSQL, plus puissant, mais inutile pour un seul
-  utilisateur au départ.
+
+### Recherche par mots-clés pour les documents
+- **Choisie parce que :** simple à comprendre, aucun service extérieur.
+- **Évolution possible :** une recherche « sémantique » (par le sens), en
+  remplaçant uniquement la fonction `rechercher()` de `documents.py`.
 
 ---
 
-## 4. Règles de sécurité (section 33)
+## 4. Sécurité et vie privée (section 33)
 
-- La clé API est rangée dans un fichier `.env`, **jamais** dans le code.
-- Le fichier `.env` est listé dans `.gitignore` : il n'est **jamais** envoyé sur GitHub.
-- Un fichier `.env.example` (sans vraie clé) montre seulement le format attendu.
-- Aucun mot de passe stocké en clair.
-- Aucun accès automatique à tes comptes personnels.
-- Aucun document envoyé à un service externe sans que ce soit clairement signalé.
-- Aucune exécution automatique de code potentiellement dangereux.
-- Toute action sensible demande une confirmation.
-
----
-
-## 5. Plan de construction (section 41)
-
-On ne construit **pas** tout d'un coup. Chaque étape est expliquée, validée par
-toi, implémentée, testée, puis documentée.
-
-### Étape 1 — MVP (version de base)
-1. Structure du projet et serveur FastAPI minimal.
-2. Page web de discussion.
-3. Module IA (connexion à Claude).
-4. Agent pédagogique : mode socratique et système d'indices (niveaux 1 à 6).
-5. Analyse de code (« explique-moi ce code », mode debugging).
-6. Mémoire des connaissances (SQLite) avec les 7 états de maîtrise
-   (Non rencontré → Découverte → Compréhension fragile → Compréhension correcte
-   → Maîtrisé → Maîtrisé en pratique → Autonome).
-7. Import de documents (cours, notes).
-8. Suivi des progrès.
-
-### Étape 2 — Ajouts progressifs
-- Évaluation diagnostique de départ (15 à 20 questions).
-- Révision espacée.
-- Détection de dépendance à l'IA.
-- Mode examen et mode professeur.
-- Tableau de bord.
-- Recherche web et sources fiables.
-- Voix.
-- Projets guidés.
-- Connecteurs externes.
+- La clé API est dans `.env`, **jamais** dans le code ni sur GitHub (`.gitignore`).
+- Toutes tes données personnelles restent sur ton ordinateur, dans `data/`
+  (ignoré par Git) : mémoire (`professeur.db`) et documents.
+- Ce qui est envoyé à Claude (Anthropic) : la conversation, ton profil
+  pédagogique résumé, et les passages de tes documents liés à ta question.
+  C'est signalé dans l'onglet Documents.
+- La **dictée** au micro est désactivée par défaut : dans Chrome/Edge, l'audio
+  est transcrit par le service du navigateur. C'est signalé dans les Réglages.
+- La **recherche web** est désactivée par défaut (coût supplémentaire).
+- Le serveur n'écoute que ton ordinateur (`127.0.0.1`).
+- Les réponses de Claude sont affichées sans pouvoir injecter de HTML
+  (`markdown.js` échappe tout le texte avant de le mettre en forme).
+- Les rôles des messages sont limités à `user` / `assistant` : la page ne peut
+  pas modifier les consignes du professeur.
+- Les fichiers importés sont limités (10 Mo, extensions connues) et enregistrés
+  sous un nom aléatoire.
+- Aucun code n'est exécuté automatiquement.
 
 ---
 
-## 6. Règle de contrôle (section 70)
+## 5. Faire évoluer le projet
 
-Pendant toute la construction de cette application, l'agent de développement
-(Claude Code) **demande la permission avant chaque action** : créer, modifier
-ou supprimer un fichier, lancer une commande, installer un paquet, faire une
-opération Git, accéder à Internet, toucher à un secret.
+Le projet est conçu pour grandir **sans tout réécrire**. Voici où agir :
 
-Pour chaque demande, il indique : quoi, pourquoi, quels fichiers, la commande
-exacte, les risques. Une permission vaut pour **une seule** action.
+| Je veux… | Fichier à modifier |
+|---|---|
+| Ajouter un concept ou un domaine (il apparaît dans la carte 3D) | `app/parcours.py` (les tests vérifient prérequis et boucles) |
+| Ajouter un mode du professeur (il apparaît dans la liste) | `app/modes.py` |
+| Changer le comportement général du professeur | `app/consignes.py` |
+| Changer de modèle Claude ou d'effort | `app/ia.py` (`MODELE`, `EFFORT`) |
+| Donner un nouvel outil à Claude | `app/ia.py` (définition) + `app/main.py` (`executer_outil`) |
+| Améliorer la recherche dans les documents | `app/documents.py` (`rechercher`) |
+| Ajouter une information au tableau de bord | `app/memoire.py` (`tableau_de_bord`) + `static/js/panneaux.js` |
+| Modifier l'apparence 3D | `static/js/carte3d.js` |
+| Ajouter un panneau | `static/index.html` (onglet) + `static/js/panneaux.js` |
+| Ajouter un connecteur externe (GitHub, Drive…) | Nouveau module `app/connecteurs/…` appelé comme un outil depuis `ia.py` |
+
+Les modules de l'interface communiquent par des **événements**
+(`emettre` / `ecouter` dans `api.js`) : par exemple, la carte 3D émet
+`demander` et la discussion l'écoute. On peut donc ajouter un module qui
+réagit à `memoire-modifiee` sans toucher aux autres.
+
+---
+
+## 6. État d'avancement (section 41)
+
+### Version de base (MVP) — terminée
+- ✅ Chat pédagogique (page web + serveur + Claude)
+- ✅ Mode socratique et niveaux d'aide 1 à 6
+- ✅ Analyse de code (modes « Explique-moi ce code » et « Débogage »)
+- ✅ Système d'indices et détection de la dépendance à l'IA (paliers d'assistance)
+- ✅ Import de documents (PDF, texte, code) et recherche de passages
+- ✅ Mémoire des connaissances (SQLite, 7 états), contrôlable par l'élève
+- ✅ Suivi des progrès
+
+### Ajouts — réalisés
+- ✅ Évaluation diagnostique à la première visite
+- ✅ Révision espacée (dates de révision selon l'état)
+- ✅ Modes examen, cours complet, sujet d'exercice, projet guidé, plan d'étude
+- ✅ Tableau de bord
+- ✅ Carte 3D interactive des connaissances
+- ✅ Recherche web (optionnelle) avec priorité aux sources officielles
+- ✅ Voix (dictée et lecture, réglables)
+
+### Pistes pour la suite
+- Connecteurs externes (GitHub, Google Drive…) avec authentification adaptée.
+- Recherche sémantique dans les documents.
+- Historique des conversations sauvegardé localement.
+- Temps d'étude mesuré par session.
+
+---
+
+## 7. Règle de contrôle (section 70)
+
+Pendant la construction, l'agent de développement (Claude Code) a demandé la
+permission avant chaque action, jusqu'à ce que l'élève lui donne explicitement
+l'autorisation de terminer le projet en autonomie, avec une seule destination
+de publication : le dépôt GitHub `Meikray/Private-teacher`.

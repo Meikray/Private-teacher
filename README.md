@@ -7,8 +7,27 @@ Son but n'est pas de faire les exercices à ta place, mais de te rendre
 **autonome** : il pose des questions, donne des indices progressifs et vérifie
 que tu as vraiment compris.
 
-> Le projet est en construction (version de base en cours).
-> Architecture détaillée : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+> Architecture détaillée et guide pour faire évoluer le projet :
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+### Ce que tu peux faire
+
+- **Discuter avec le professeur**, qui te guide par questions et indices
+  progressifs au lieu de te donner la solution.
+- **Choisir un mode** : socratique (par défaut), cours complet, explique-moi ce
+  code, débogage, sujet d'exercice, examen (aucune solution), évaluation
+  diagnostique, révision, projet guidé, plan d'étude.
+- **Explorer ta carte 3D des connaissances** : chaque sphère est une notion,
+  colorée selon ton niveau de maîtrise (7 états, du gris au doré). Plus elle
+  est haute, plus la notion est avancée. Clique dessus pour l'apprendre ou la
+  réviser.
+- **Suivre tes progrès** dans le tableau de bord : notions maîtrisées ou
+  fragiles, révisions à faire, erreurs fréquentes, et ton palier d'autonomie.
+- **Contrôler ta mémoire** : voir, corriger, oublier ou tout réinitialiser.
+- **Importer tes cours** (PDF, texte, code) : le professeur s'appuie dessus et
+  peut en faire des fiches de révision.
+- **Parler et écouter** : dictée au micro et lecture vocale des réponses
+  (voix, vitesse et langue réglables).
 
 ---
 
@@ -86,6 +105,7 @@ uvicorn app.main:app --reload
 - `--reload` redémarre automatiquement le serveur quand tu modifies le code.
 
 Ouvre ensuite ton navigateur à l'adresse **http://127.0.0.1:8000**.
+(Chrome ou Edge conseillés : ils permettent aussi la dictée au micro.)
 
 Pour arrêter le serveur : `Ctrl + C` dans le terminal.
 
@@ -106,17 +126,35 @@ Pour arrêter le serveur : `Ctrl + C` dans le terminal.
 pytest -v
 ```
 
-Les tests utilisent un **faux Claude** : ils ne coûtent rien et n'ont pas
-besoin de clé API.
+Les tests utilisent un **faux Claude** et une base de données jetable : ils ne
+coûtent rien, n'ont pas besoin de clé API et ne touchent pas à ta mémoire.
 
 ---
 
-## 5. Coût
+## 5. Tes données
+
+Tout reste **sur ton ordinateur**, dans le dossier `data/` (jamais envoyé sur
+GitHub) :
+
+- `data/professeur.db` : ta mémoire pédagogique (concepts, erreurs, progrès) ;
+- `data/documents/` : le texte de tes documents importés.
+
+Ce qui est envoyé à Claude (Anthropic) pour qu'il te réponde : la conversation
+en cours, un résumé de ton profil pédagogique, et les passages de tes
+documents liés à ta question.
+
+---
+
+## 6. Coût
 
 L'API Claude est **payante**. Le professeur utilise le modèle Claude Opus 5.5 :
-compte environ **2 à 3 centimes de dollar par échange** (une question et sa
-réponse). Le coût réel dépend de la longueur des messages. Tu peux suivre ta
+compte environ **3 à 6 centimes de dollar par échange** (une question et sa
+réponse, y compris l'enregistrement de ta progression). Le coût réel dépend de
+la longueur des messages et des documents utilisés. Tu peux suivre ta
 consommation sur [console.anthropic.com](https://console.anthropic.com).
+
+La **recherche web** est désactivée par défaut (onglet Réglages) : quand elle
+est activée, chaque recherche est facturée en plus.
 
 Le modèle est défini à un seul endroit : la variable `MODELE` dans
 [`app/ia.py`](app/ia.py).

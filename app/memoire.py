@@ -31,6 +31,9 @@ CHEMIN_PAR_DEFAUT = RACINE / "data" / "professeur.db"
 # attend avant de le revoir. Les états 0 et 1 ne sont pas planifiés.
 INTERVALLES_REVISION = {2: 1, 3: 3, 4: 7, 5: 14, 6: 30}
 
+# Nombre minimal d'aides observées avant de réduire le niveau d'assistance.
+MIN_OBSERVATIONS = 5
+
 # Clés autorisées dans le profil (on refuse le reste).
 CLES_PROFIL = ("objectifs", "langage_etudie", "niveau_estime", "cours_actuels")
 
@@ -184,7 +187,11 @@ def lister_erreurs(limite=50):
         lignes = con.execute(
             "SELECT * FROM erreurs ORDER BY id DESC LIMIT ?", (limite,)
         ).fetchall()
-    return [dict(l) for l in lignes]
+    # On ajoute le nom lisible du concept (ex. "boucle" -> "Boucle").
+    return [
+        {**dict(l), "nom_concept": CONCEPTS_PAR_ID.get(l["concept"], {}).get("nom", l["concept"])}
+        for l in lignes
+    ]
 
 
 def supprimer_erreur(erreur_id):
@@ -228,6 +235,10 @@ def niveau_assistance():
     if not lignes:
         palier = 0
         part_solution = 0.0
+    elif len(lignes) < MIN_OBSERVATIONS:
+        # Pas encore assez d'observations pour réduire l'aide.
+        palier = 0
+        part_solution = sum(l["demande_solution"] for l in lignes) / len(lignes)
     else:
         moyenne = sum(l["niveau"] for l in lignes) / len(lignes)
         reussites = sum(1 for l in lignes if l["exercice"] == "reussi_sans_aide")
@@ -345,7 +356,7 @@ def resume_pour_professeur():
         lignes.append("- Aucun concept enregistré pour l'instant (première utilisation probable).")
     if erreurs:
         lignes.append("- Erreurs récentes : " + "; ".join(
-            f"{e['concept']} : {e['description']}" for e in erreurs
+            f"{e['nom_concept']} : {e['description']}" for e in erreurs
         ))
     if revisions:
         lignes.append("- Révisions dues : " + ", ".join(c["nom"] for c in revisions))

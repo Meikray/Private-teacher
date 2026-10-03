@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-  Structure de la page de discussion (le « squelette »).
-  L'apparence est dans style.css, le comportement dans app.js.
+  Structure de la page (le « squelette »).
+  L'apparence est dans style.css, le comportement dans le dossier js/.
 -->
 <html lang="fr">
 <head>
@@ -10,27 +10,102 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assistant Professeur Personnel</title>
   <link rel="stylesheet" href="/static/style.css">
+  <!--
+    « importmap » : indique au navigateur où trouver la bibliothèque 3D
+    Three.js (version 0.160.0, licence MIT). Elle est copiée dans le projet
+    (static/vendor/three) : la 3D fonctionne même sans Internet.
+  -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/static/vendor/three/three.module.min.js",
+        "three/addons/": "/static/vendor/three/addons/"
+      }
+    }
+  </script>
 </head>
 <body>
-  <header>
-    <h1>Assistant Professeur Personnel</h1>
-    <p class="sous-titre">Informatique, programmation et IoT</p>
+  <header class="entete">
+    <div class="titre">
+      <h1>Assistant Professeur Personnel</h1>
+      <p class="sous-titre">Informatique, programmation et IoT — ton objectif : l'autonomie</p>
+    </div>
+    <!-- Onglets du panneau de gauche. -->
+    <nav class="onglets" role="tablist" aria-label="Panneaux">
+      <button role="tab" class="onglet" data-panneau="carte" aria-selected="true">Carte 3D</button>
+      <button role="tab" class="onglet" data-panneau="tableau" aria-selected="false">Tableau de bord</button>
+      <button role="tab" class="onglet" data-panneau="memoire" aria-selected="false">Ma mémoire</button>
+      <button role="tab" class="onglet" data-panneau="documents" aria-selected="false">Documents</button>
+      <button role="tab" class="onglet" data-panneau="reglages" aria-selected="false">Réglages</button>
+    </nav>
   </header>
 
-  <main>
-    <!-- Zone où s'affichent les messages de la conversation. -->
-    <section id="conversation" aria-live="polite"></section>
+  <main class="disposition">
+    <!-- ============ Panneau de gauche ============ -->
+    <section class="panneaux">
 
-    <!-- Formulaire pour écrire et envoyer un message. -->
-    <form id="formulaire">
-      <textarea id="message" rows="3"
-                placeholder="Pose ta question ou colle ton code ici…"
-                required></textarea>
-      <button type="submit" id="bouton-envoyer">Envoyer</button>
-    </form>
+      <!-- Carte 3D des connaissances -->
+      <div class="panneau actif" id="panneau-carte" role="tabpanel">
+        <div id="scene-3d" class="scene-3d" aria-label="Carte 3D des connaissances"></div>
+        <div class="legende" id="legende"></div>
+        <p class="aide-carte">
+          Glisse pour tourner · molette pour zoomer · clique sur une sphère.
+          Plus une sphère est haute, plus la notion est avancée.
+        </p>
+        <div class="fiche-concept" id="fiche-concept" hidden>
+          <button class="fermer" id="fermer-fiche" aria-label="Fermer">×</button>
+          <h2 id="fiche-nom"></h2>
+          <p class="fiche-domaine" id="fiche-domaine"></p>
+          <p><strong>État :</strong> <span id="fiche-etat"></span></p>
+          <p id="fiche-remarque" class="fiche-remarque"></p>
+          <p id="fiche-prerequis" class="fiche-prerequis"></p>
+          <div class="actions">
+            <button id="fiche-apprendre">Apprendre</button>
+            <button id="fiche-reviser" class="secondaire">Réviser</button>
+          </div>
+        </div>
+        <div class="secours-3d" id="secours-3d" hidden></div>
+      </div>
+
+      <!-- Tableau de bord -->
+      <div class="panneau" id="panneau-tableau" role="tabpanel" hidden></div>
+
+      <!-- Mémoire pédagogique -->
+      <div class="panneau" id="panneau-memoire" role="tabpanel" hidden></div>
+
+      <!-- Documents de cours -->
+      <div class="panneau" id="panneau-documents" role="tabpanel" hidden></div>
+
+      <!-- Réglages -->
+      <div class="panneau" id="panneau-reglages" role="tabpanel" hidden></div>
+    </section>
+
+    <!-- ============ Discussion (à droite) ============ -->
+    <section class="discussion">
+      <div class="barre-discussion">
+        <label>Mode
+          <select id="choix-mode"></select>
+        </label>
+        <button id="nouvelle-conversation" class="secondaire" title="Effacer la conversation affichée">Nouvelle conversation</button>
+      </div>
+
+      <!-- Zone où s'affichent les messages de la conversation. -->
+      <div id="conversation" class="conversation" aria-live="polite"></div>
+
+      <!-- Formulaire pour écrire et envoyer un message. -->
+      <form id="formulaire" class="formulaire">
+        <textarea id="message" rows="3"
+                  placeholder="Pose ta question ou colle ton code ici… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)"
+                  required></textarea>
+        <div class="boutons-formulaire">
+          <button type="button" id="bouton-micro" class="secondaire" title="Dicter (micro)" aria-pressed="false">🎤</button>
+          <button type="submit" id="bouton-envoyer">Envoyer</button>
+        </div>
+      </form>
+    </section>
   </main>
 
-  <!-- Le script est chargé à la fin, quand tous les éléments existent déjà. -->
-  <script src="/static/app.js"></script>
+  <!-- Point d'entrée JavaScript (module). Il charge les autres modules. -->
+  <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

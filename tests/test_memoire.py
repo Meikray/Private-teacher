@@ -49,13 +49,18 @@ def test_erreurs():
     memoire.ajouter_erreur("pointeurs", "confond * et &")
     erreurs = memoire.lister_erreurs()
     assert erreurs[0]["description"] == "confond * et &"
+    assert erreurs[0]["nom_concept"] == "Pointeurs"
     memoire.supprimer_erreur(erreurs[0]["id"])
     assert memoire.lister_erreurs() == []
 
 
 def test_niveau_assistance_monte_avec_l_autonomie():
     assert memoire.niveau_assistance()["palier"] == 0
-    for _ in range(5):
+    # Trop peu d'observations : on ne réduit pas encore l'aide.
+    for _ in range(2):
+        memoire.enregistrer_aide(0, False, "reussi_sans_aide")
+    assert memoire.niveau_assistance()["palier"] == 0
+    for _ in range(3):
         memoire.enregistrer_aide(0, False, "reussi_sans_aide")
     assert memoire.niveau_assistance()["palier"] == 3
 

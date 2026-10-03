@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!--
+  Structure de la page de discussion (le « squelette »).
+  L'apparence est dans style.css, le comportement dans app.js.
+-->
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <!-- Adapte la page à la largeur de l'écran (ordinateur ou téléphone). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assistant Professeur Personnel</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Assistant Professeur Personnel</h1>
+    <p class="sous-titre">Informatique, programmation et IoT</p>
+  </header>
+
+  <main>
+    <!-- Zone où s'affichent les messages de la conversation. -->
+    <section id="conversation" aria-live="polite"></section>
+
+    <!-- Formulaire pour écrire et envoyer un message. -->
+    <form id="formulaire">
+      <textarea id="message" rows="3"
+                placeholder="Pose ta question ou colle ton code ici…"
+                required></textarea>
+      <button type="submit" id="bouton-envoyer">Envoyer</button>
+    </form>
+  </main>
+
+  <!-- Le script est chargé à la fin, quand tous les éléments existent déjà. -->
+  <script src="/static/app.js"></script>
+</body>
+</html>

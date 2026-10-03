@@ -1,0 +1,110 @@
+/* Apparence de la page de discussion (les « vêtements »). */
+
+/* Couleurs principales, définies une seule fois pour être réutilisées. */
+:root {
+  --fond: #f4f6f9;
+  --texte: #1f2933;
+  --principal: #1f3a5f;
+  --message-eleve: #dbe7f5;
+  --message-prof: #ffffff;
+  --erreur: #a3262e;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--fond);
+  color: var(--texte);
+}
+
+header {
+  background: var(--principal);
+  color: white;
+  padding: 16px;
+  text-align: center;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.sous-titre {
+  margin: 4px 0 0;
+  opacity: 0.8;
+}
+
+/* La zone principale est centrée et ne dépasse pas 800 pixels de large. */
+main {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Zone des messages : elle défile si la conversation devient longue. */
+#conversation {
+  min-height: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* Style commun à tous les messages. */
+.message {
+  padding: 10px 14px;
+  border-radius: 10px;
+  max-width: 85%;
+  white-space: pre-wrap; /* garde les retours à la ligne (utile pour le code) */
+}
+
+/* Tes messages : à droite. */
+.message.eleve {
+  align-self: flex-end;
+  background: var(--message-eleve);
+}
+
+/* Les messages du professeur : à gauche. */
+.message.professeur {
+  align-self: flex-start;
+  background: var(--message-prof);
+  border: 1px solid #d9dee5;
+}
+
+.message.erreur {
+  align-self: flex-start;
+  color: var(--erreur);
+  background: #fdecee;
+}
+
+#formulaire {
+  display: flex;
+  gap: 8px;
+}
+
+#message {
+  flex: 1;
+  padding: 10px;
+  font: inherit;
+  border: 1px solid #c4cbd4;
+  border-radius: 8px;
+  resize: vertical;
+}
+
+#bouton-envoyer {
+  padding: 0 20px;
+  font: inherit;
+  color: white;
+  background: var(--principal);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Bouton grisé pendant qu'on attend la réponse. */
+#bouton-envoyer:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}

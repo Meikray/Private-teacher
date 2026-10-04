@@ -93,8 +93,14 @@ fi
 URL="http://127.0.0.1:8000"
 (
   sleep 3
-  if command -v open >/dev/null 2>&1; then open "$URL"          # Mac
-  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" # Linux
+  # On essaie d'abord Chrome (conseillé : il permet aussi la dictée au micro),
+  # puis le navigateur par défaut.
+  if [ -d "/Applications/Google Chrome.app" ]; then open -a "Google Chrome" "$URL"   # Mac
+  elif command -v google-chrome >/dev/null 2>&1; then google-chrome "$URL"          # Linux
+  elif command -v google-chrome-stable >/dev/null 2>&1; then google-chrome-stable "$URL"
+  elif command -v chromium >/dev/null 2>&1; then chromium "$URL"
+  elif command -v open >/dev/null 2>&1; then open "$URL"
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL"
   fi
 ) >/dev/null 2>&1 &
 echo

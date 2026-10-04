@@ -75,7 +75,8 @@ findstr /c:"mets-ta-cle-ici" ".env" >nul && (
 
 :lancer
 REM --- 5. Ouvrir le navigateur dans 3 secondes, puis demarrer le serveur ---
-start "" cmd /c "timeout /t 3 >nul & start http://127.0.0.1:8000"
+REM On essaie d'abord Chrome, sinon le navigateur par defaut.
+start "" cmd /c "timeout /t 3 >nul & (start chrome http://127.0.0.1:8000 || start http://127.0.0.1:8000)"
 echo.
 echo Serveur demarre sur http://127.0.0.1:8000  (ferme cette fenetre pour l'arreter)
 python -m uvicorn app.main:app

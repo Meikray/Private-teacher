@@ -6,7 +6,7 @@ const CLE = "professeur-reglages";
 
 const PAR_DEFAUT = {
   detail: "normal", // "court", "normal" ou "detaille"
-  rechercheWeb: false, // recherche Internet par Claude (payante en plus)
+  rechercheWeb: true, // accès à Internet (gratuit avec l'IA locale, payant avec Claude)
   lectureVocale: false, // le professeur lit ses réponses à voix haute
   dictee: false, // dictée au micro autorisée
   voix: "", // nom de la voix choisie ("" = voix par défaut)

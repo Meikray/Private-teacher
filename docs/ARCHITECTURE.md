@@ -26,6 +26,7 @@ si un module change, les autres ne sont pas cassés.
 | `parcours.py` | La **carte des connaissances** : domaines, concepts, prérequis, 7 états de maîtrise. |
 | `memoire.py` | La **mémoire pédagogique** locale (SQLite) : états, erreurs, aides, révisions, profil, tableau de bord. |
 | `documents.py` | Les **documents de cours** : import (PDF, texte, code), extraction du texte, recherche de passages. |
+| `internet.py` | L'**accès à Internet** de l'IA locale : lire une page ou un PDF, chercher sur Wikipédia, avec protections (sites publics uniquement, tailles limitées). |
 
 ### Interface (navigateur, dossier `static/`)
 
@@ -138,7 +139,11 @@ Points importants :
 - La clé API est dans `.env`, **jamais** dans le code ni sur GitHub (`.gitignore`).
 - Toutes tes données personnelles restent sur ton ordinateur, dans `data/`
   (ignoré par Git) : mémoire (`professeur.db`) et documents.
-- En mode gratuit (Ollama), **rien ne quitte l'ordinateur**.
+- En mode gratuit (Ollama), **les conversations ne quittent pas l'ordinateur**.
+  Avec l'interrupteur 🌐 Internet, l'IA peut lire des pages publiques :
+  `internet.py` refuse les protocoles autres que http(s) et toute adresse
+  locale ou privée (y compris après une redirection), limite la taille
+  téléchargée (3 Mo) et le texte transmis au modèle.
 - Avec Claude, ce qui est envoyé à Anthropic : la conversation, ton profil
   pédagogique résumé, et les passages de tes documents liés à ta question.
   C'est signalé dans l'onglet Documents.

@@ -30,6 +30,9 @@ que tu as vraiment compris.
   peut en faire des fiches de révision.
 - **Parler et écouter** : dictée au micro et lecture vocale des réponses
   (voix, vitesse et langue réglables).
+- **Accéder à Internet** (interrupteur 🌐 Internet) : le professeur peut ouvrir
+  les liens que tu lui donnes (cours, documentation, PDF) et chercher sur
+  Wikipédia, puis cite ses sources.
 
 ---
 
@@ -170,8 +173,11 @@ GitHub) :
 - `data/professeur.db` : ta mémoire pédagogique (concepts, erreurs, progrès) ;
 - `data/documents/` : le texte de tes documents importés.
 
-**En mode gratuit (Ollama), rien ne quitte ton ordinateur** : l'IA tourne
-chez toi.
+**En mode gratuit (Ollama), tes conversations ne quittent pas ton
+ordinateur** : l'IA tourne chez toi. Seule exception : quand l'interrupteur
+🌐 Internet est activé, les sites que le professeur consulte (et Wikipédia)
+reçoivent ses demandes de pages. Pour la protection de ton PC, il ne peut lire
+que des sites publics (jamais ton ordinateur ni ton réseau local).
 
 Si tu choisis Claude, ce qui est envoyé à Anthropic pour qu'il te réponde : la
 conversation en cours, un résumé de ton profil pédagogique, et les passages de
@@ -189,8 +195,8 @@ Deux possibilités, à choisir dans le fichier `.env` (ligne `FOURNISSEUR=`) :
 | Compte / clé | Aucun | Clé API sur [console.anthropic.com](https://console.anthropic.com) |
 | Vie privée | Tout reste sur ton ordinateur | Conversation envoyée à Anthropic |
 | Qualité | Correcte (dépend du modèle et de ton PC) | Excellente (Claude Opus 5.5) |
-| Recherche web | Non | Oui (en option, facturée en plus) |
-| Internet | Seulement pour télécharger le modèle | Nécessaire |
+| Accès à Internet (🌐) | Gratuit : lecture de liens et recherche Wikipédia | Recherche web, facturée en plus |
+| Connexion | Seulement pour le modèle et l'option 🌐 | Nécessaire |
 
 **Choisir le modèle gratuit** (ligne `MODELE_OLLAMA=` dans `.env`) :
 

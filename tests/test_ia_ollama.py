@@ -100,5 +100,29 @@ def test_ollama_non_lance():
 
 def test_description():
     assert ia.description() == {
-        "fournisseur": "ollama", "modele": "qwen2.5:7b", "gratuit": True, "recherche_web": False,
+        "fournisseur": "ollama", "modele": "qwen2.5:7b", "gratuit": True, "recherche_web": True,
     }
+
+
+def test_outils_internet_proposes_et_executes(monkeypatch):
+    # Avec Internet activé, l'IA reçoit les outils et peut lire une page.
+    monkeypatch.setattr(ia.internet, "executer", lambda nom, args: f"[{nom}] {args['url']}")
+    appel = {"function": {"name": "lire_page_web", "arguments": {"url": "https://exemple.org"}}}
+    client, requetes = faux_ollama([
+        (200, {"message": {"role": "assistant", "content": "", "tool_calls": [appel]}}),
+        (200, {"message": {"role": "assistant", "content": "D'après la page..."}}),
+    ])
+    reponse = ia.demander_au_professeur(HISTORIQUE, recherche_web=True, client=client)
+
+    assert reponse == "D'après la page..."
+    noms = [o["function"]["name"] for o in requetes[0]["tools"]]
+    assert noms == ["enregistrer_progression", "lire_page_web", "rechercher_wikipedia"]
+    assert "ACCÈS À INTERNET" in requetes[0]["messages"][0]["content"]
+    assert requetes[0]["options"]["num_ctx"] == 16384
+    assert requetes[1]["messages"][-1]["content"] == "[lire_page_web] https://exemple.org"
+
+
+def test_sans_internet_pas_d_outils_web():
+    client, requetes = faux_ollama([(200, {"message": {"role": "assistant", "content": "ok"}})])
+    ia.demander_au_professeur(HISTORIQUE, recherche_web=False, client=client)
+    assert [o["function"]["name"] for o in requetes[0]["tools"]] == ["enregistrer_progression"]

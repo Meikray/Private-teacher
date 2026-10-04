@@ -351,8 +351,7 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 8px 14px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--bordure);
 }
@@ -362,6 +361,19 @@ textarea {
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
+}
+
+#nouvelle-conversation {
+  margin-left: auto;
+  padding: 6px 12px;
+}
+
+.interrupteur {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
 }
 
 .conversation {

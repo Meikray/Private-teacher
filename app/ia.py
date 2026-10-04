@@ -10,7 +10,9 @@ Deux « fournisseurs » sont possibles (variable FOURNISSEUR dans .env) :
 Fonctionnement : l'IA peut utiliser des « outils » pendant sa réponse.
 - enregistrer_progression : elle note dans la mémoire locale ce qu'elle a
   observé (concepts compris ou fragiles, erreurs, niveau d'aide donné) ;
-- web_search (Claude seulement, optionnel) : recherche sur Internet.
+- accès à Internet (optionnel, case « Internet » des Réglages) :
+  web_search pour Claude ; lire_page_web et rechercher_wikipedia pour
+  l'IA locale (voir app/internet.py).
 Quand l'IA appelle un outil, on l'exécute, on lui renvoie le résultat,
 et elle continue sa réponse : c'est la « boucle d'outils ».
 """
@@ -21,6 +23,7 @@ import os
 import anthropic
 import httpx
 
+from app import internet
 from app.consignes import CONSIGNES_PROFESSEUR
 from app.parcours import CONCEPTS, ETATS
 
@@ -58,7 +61,7 @@ def description():
         return {"fournisseur": "anthropic", "modele": MODELE, "gratuit": False,
                 "recherche_web": True}
     return {"fournisseur": "ollama", "modele": modele_ollama(), "gratuit": True,
-            "recherche_web": False}
+            "recherche_web": True}
 
 
 # Le modèle Claude utilisé comme professeur (choisi par l'élève).
@@ -172,7 +175,7 @@ def demander_au_professeur(
     """
     if fournisseur() == "anthropic":
         return _demander_a_claude(historique, contexte, executer_outil, recherche_web, client)
-    return _demander_a_ollama(historique, contexte, executer_outil, client)
+    return _demander_a_ollama(historique, contexte, executer_outil, recherche_web, client)
 
 
 def _demander_a_claude(
@@ -280,7 +283,9 @@ OUTIL_PROGRESSION_OLLAMA = {
 }
 
 
-def _demander_a_ollama(historique, contexte="", executer_outil=_sans_outil, client=None):
+def _demander_a_ollama(
+    historique, contexte="", executer_outil=_sans_outil, recherche_web=False, client=None,
+):
     """Envoie la conversation au modèle local (Ollama) et renvoie la réponse.
 
     On utilise l'API HTTP d'Ollama (POST /api/chat), qui tourne sur ton
@@ -292,8 +297,14 @@ def _demander_a_ollama(historique, contexte="", executer_outil=_sans_outil, clie
     client = client or httpx.Client(timeout=600)
 
     systeme = CONSIGNES_PROFESSEUR + ("\n\n" + contexte if contexte else "")
-    messages = [{"role": "system", "content": systeme}, *historique]
     outils = [OUTIL_PROGRESSION_OLLAMA]
+    if recherche_web:
+        outils += internet.OUTILS_INTERNET
+        systeme += "\n\n" + internet.CONSIGNE_INTERNET
+    messages = [{"role": "system", "content": systeme}, *historique]
+    # Taille de la « mémoire de travail » du modèle (en tokens). Plus grande
+    # avec Internet, car les pages lues prennent de la place.
+    contexte_max = int(os.environ.get("CONTEXTE_OLLAMA", 16384 if recherche_web else 8192))
     morceaux = []
 
     for _ in range(MAX_TOURS):
@@ -301,8 +312,7 @@ def _demander_a_ollama(historique, contexte="", executer_outil=_sans_outil, clie
             "model": modele,
             "messages": messages,
             "stream": False,
-            # Taille de la « mémoire de travail » du modèle (en tokens).
-            "options": {"num_ctx": 8192},
+            "options": {"num_ctx": contexte_max},
         }
         if outils:
             corps["tools"] = outils
@@ -353,10 +363,11 @@ def _demander_a_ollama(historique, contexte="", executer_outil=_sans_outil, clie
                     arguments = json.loads(arguments)
                 except json.JSONDecodeError:
                     arguments = {}
-            messages.append({
-                "role": "tool",
-                "tool_name": fonction.get("name", ""),
-                "content": executer_outil(fonction.get("name", ""), arguments),
-            })
+            nom = fonction.get("name", "")
+            if nom in internet.NOMS_OUTILS_INTERNET:
+                resultat = internet.executer(nom, arguments)
+            else:
+                resultat = executer_outil(nom, arguments)
+            messages.append({"role": "tool", "tool_name": nom, "content": resultat})
 
     return "\n\n".join(morceaux)

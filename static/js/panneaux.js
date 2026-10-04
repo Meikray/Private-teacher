@@ -383,7 +383,10 @@ function caseACocher(nom, libelle, note) {
   const champ = element("input");
   champ.type = "checkbox";
   champ.checked = Boolean(lireReglages()[nom]);
-  champ.addEventListener("change", () => modifierReglage(nom, champ.checked));
+  champ.addEventListener("change", () => {
+    modifierReglage(nom, champ.checked);
+    emettre("reglage-modifie", nom);
+  });
   label.append(champ, " " + libelle);
   const bloc = element("div");
   bloc.append(label);
@@ -415,10 +418,11 @@ async function afficherReglages() {
 
   grille.appendChild(caseACocher(
     "rechercheWeb",
-    "Autoriser le professeur à chercher sur Internet",
-    "Uniquement avec Claude (pas avec l'IA locale gratuite). Utile pour les " +
-      "technologies récentes ou la documentation officielle. Chaque recherche est " +
-      "facturée en plus par Anthropic (3 au maximum par question)."
+    "Autoriser le professeur à accéder à Internet",
+    "Il peut alors ouvrir les liens (cours, documentation, PDF) et chercher sur " +
+      "Wikipédia. Les sites consultés voient passer ces demandes. Avec l'IA locale, " +
+      "c'est gratuit ; avec Claude, chaque recherche est facturée en plus par " +
+      "Anthropic (3 au maximum par question)."
   ));
 
   p.appendChild(grille);

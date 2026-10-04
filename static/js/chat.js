@@ -3,7 +3,7 @@
 
 import { element, emettre, ecouter, envoyer, lire as lireApi } from "./api.js";
 import { markdownVersHtml } from "./markdown.js";
-import { lireReglages } from "./reglages.js";
+import { lireReglages, modifierReglage } from "./reglages.js";
 import * as voix from "./voix.js";
 
 const conversation = document.getElementById("conversation");
@@ -13,6 +13,7 @@ const boutonEnvoyer = document.getElementById("bouton-envoyer");
 const boutonMicro = document.getElementById("bouton-micro");
 const choixMode = document.getElementById("choix-mode");
 const boutonNouvelle = document.getElementById("nouvelle-conversation");
+const choixInternet = document.getElementById("choix-internet");
 
 // L'API Claude ne retient rien entre deux messages : c'est la page qui garde
 // toute la conversation et l'envoie en entier à chaque fois.
@@ -129,6 +130,14 @@ export async function initialiserChat() {
   } catch (erreur) {
     afficherMessage(erreur.message, "erreur");
   }
+
+  // Interrupteur « Internet » : le même réglage que dans l'onglet Réglages.
+  choixInternet.checked = lireReglages().rechercheWeb;
+  choixInternet.addEventListener("change", () =>
+    modifierReglage("rechercheWeb", choixInternet.checked)
+  );
+  // Si le réglage change dans l'onglet Réglages, on met la case à jour.
+  ecouter("reglage-modifie", () => (choixInternet.checked = lireReglages().rechercheWeb));
 
   formulaire.addEventListener("submit", (evenement) => {
     // Empêche le comportement par défaut du formulaire (recharger la page).

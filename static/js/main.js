@@ -7,6 +7,7 @@
 //   voix.js      -> dictée et lecture vocale
 // Ils communiquent par des événements (voir emettre/ecouter dans api.js).
 
+import { element, lire } from "./api.js";
 import { initialiserCarte } from "./carte.js";
 import { initialiserChat } from "./chat.js";
 import { initialiserPanneaux } from "./panneaux.js";
@@ -14,3 +15,13 @@ import { initialiserPanneaux } from "./panneaux.js";
 initialiserPanneaux();
 initialiserChat();
 initialiserCarte().catch((erreur) => console.error("Carte indisponible :", erreur));
+
+// Indique dans l'en-tête quelle IA joue le professeur.
+lire("/api/config")
+  .then((config) => {
+    const texte = config.gratuit
+      ? `Professeur : IA locale gratuite (${config.modele})`
+      : `Professeur : Claude (${config.modele})`;
+    document.querySelector(".titre").appendChild(element("p", texte, "badge-ia"));
+  })
+  .catch(() => {});

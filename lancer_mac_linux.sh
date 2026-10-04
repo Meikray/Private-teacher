@@ -26,20 +26,54 @@ fi
 echo "Vérification des bibliothèques..."
 python -m pip install -q -r requirements.txt
 
-# --- 4. Clé API dans .env ---
+# --- 4. Configuration (.env) ---
 [ -f .env ] || cp .env.example .env
-if grep -q "mets-ta-cle-ici" .env; then
-  echo
-  echo "Il faut ta clé API Anthropic (créée sur https://console.anthropic.com, rubrique « API Keys »)."
-  # -s : la clé ne s'affiche pas à l'écran pendant que tu la colles.
-  read -r -s -p "Colle ta clé ici puis appuie sur Entrée (rien ne s'affiche, c'est normal) : " CLE
-  echo
-  if [ -z "$CLE" ]; then
-    echo "Aucune clé saisie. Relance le lanceur quand tu l'auras."
+# Lit une valeur dans .env (ex. valeur FOURNISSEUR) ; vide si absente.
+valeur() { grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- | tr -d '[:space:]'; }
+FOURNISSEUR="$(valeur FOURNISSEUR)"
+FOURNISSEUR="${FOURNISSEUR:-ollama}"
+
+if [ "$FOURNISSEUR" = "ollama" ]; then
+  # --- 4a. IA locale gratuite (Ollama) ---
+  MODELE="$(valeur MODELE_OLLAMA)"
+  MODELE="${MODELE:-qwen2.5:7b}"
+  if ! command -v ollama >/dev/null 2>&1; then
+    echo
+    echo "Ollama (l'IA gratuite qui tourne sur ton ordinateur) n'est pas installé."
+    echo "  - Linux : curl -fsSL https://ollama.com/install.sh | sh"
+    echo "  - Mac   : télécharge-le sur https://ollama.com/download"
+    echo "Installe-le, puis relance ce fichier."
     exit 1
   fi
-  # Remplace la ligne de la clé dans .env (sans afficher la clé).
-  CLE="$CLE" python - <<'PY'
+  # Démarre le service Ollama s'il ne tourne pas déjà.
+  if ! curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    echo "Démarrage d'Ollama..."
+    (ollama serve >/dev/null 2>&1 &)
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break
+      sleep 1
+    done
+  fi
+  # Télécharge le modèle la première fois (plusieurs Go : sois patient).
+  if ! ollama list | awk '{print $1}' | grep -qx "$MODELE"; then
+    echo "Téléchargement du modèle $MODELE (une seule fois, plusieurs Go)..."
+    ollama pull "$MODELE"
+  fi
+  echo "Professeur : IA locale gratuite ($MODELE)."
+else
+  # --- 4b. Claude (payant) : clé API ---
+  if grep -q "mets-ta-cle-ici" .env; then
+    echo
+    echo "Il faut ta clé API Anthropic (créée sur https://console.anthropic.com, rubrique « API Keys »)."
+    # -s : la clé ne s'affiche pas à l'écran pendant que tu la colles.
+    read -r -s -p "Colle ta clé ici puis appuie sur Entrée (rien ne s'affiche, c'est normal) : " CLE
+    echo
+    if [ -z "$CLE" ]; then
+      echo "Aucune clé saisie. Relance le lanceur quand tu l'auras."
+      exit 1
+    fi
+    # Remplace la ligne de la clé dans .env (sans afficher la clé).
+    CLE="$CLE" python - <<'PY'
 import os, pathlib
 fichier = pathlib.Path(".env")
 lignes = [
@@ -49,9 +83,10 @@ lignes = [
 ]
 fichier.write_text("\n".join(lignes) + "\n", encoding="utf-8")
 PY
-  unset CLE
-  chmod 600 .env  # seul ton compte peut lire ce fichier
-  echo "Clé enregistrée dans .env (ce fichier n'est jamais envoyé sur GitHub)."
+    unset CLE
+    chmod 600 .env  # seul ton compte peut lire ce fichier
+    echo "Clé enregistrée dans .env (ce fichier n'est jamais envoyé sur GitHub)."
+  fi
 fi
 
 # --- 5. Ouvrir le navigateur dans 3 secondes, puis démarrer le serveur ---

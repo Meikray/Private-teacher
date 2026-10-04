@@ -106,3 +106,15 @@ def test_tableau_de_bord_et_reinitialisation():
     tableau = memoire.tableau_de_bord()
     assert tableau["nb_messages"] == 0
     assert tableau["maitrises"] == []
+
+
+def test_appliquer_progression_resiste_aux_donnees_mal_formees():
+    # Un petit modèle local peut envoyer n'importe quoi : rien ne doit planter.
+    resultat = memoire.appliquer_progression({
+        "concepts": [{"id": "boucle", "etat": "3"}, "pas un objet", {"etat": 2}],
+        "erreurs": "pas une liste",
+        "niveau_aide": "beaucoup",
+        "exercice": "inconnu",
+    })
+    assert resultat["mis_a_jour"] == ["boucle"]
+    assert memoire.appliquer_progression("n'importe quoi") == {"mis_a_jour": [], "ignores": []}

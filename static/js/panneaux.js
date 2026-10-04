@@ -319,8 +319,9 @@ async function afficherDocuments(messageStatut = "") {
   const avertissement = element("div", "", "encadre");
   avertissement.textContent =
     "À savoir : quand tu poses une question, les passages de tes documents qui " +
-    "s'y rapportent sont envoyés à Claude (Anthropic) avec ta question, pour que " +
-    "le professeur s'appuie sur ton cours. N'importe pas de documents confidentiels.";
+    "s'y rapportent sont transmis au professeur avec ta question. Avec l'IA locale " +
+    "gratuite, rien ne quitte ton ordinateur ; avec Claude, ces passages sont " +
+    "envoyés à Anthropic.";
   p.appendChild(avertissement);
 
   const ligne = element("div", "", "ligne");
@@ -415,8 +416,9 @@ async function afficherReglages() {
   grille.appendChild(caseACocher(
     "rechercheWeb",
     "Autoriser le professeur à chercher sur Internet",
-    "Utile pour les technologies récentes ou la documentation officielle. " +
-      "Chaque recherche est facturée en plus par Anthropic (3 au maximum par question)."
+    "Uniquement avec Claude (pas avec l'IA locale gratuite). Utile pour les " +
+      "technologies récentes ou la documentation officielle. Chaque recherche est " +
+      "facturée en plus par Anthropic (3 au maximum par question)."
   ));
 
   p.appendChild(grille);

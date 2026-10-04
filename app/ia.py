@@ -1,23 +1,65 @@
-"""Module IA : le seul fichier de l'application qui parle à Claude.
+"""Module IA : le seul fichier de l'application qui parle à une IA.
 
-Si un jour on change de fournisseur d'IA, c'est uniquement ce fichier
-qu'il faudra modifier.
+Deux « fournisseurs » sont possibles (variable FOURNISSEUR dans .env) :
+- "ollama" (par défaut) : une IA GRATUITE qui tourne sur ton ordinateur
+  grâce au logiciel Ollama (https://ollama.com). Pas de clé, pas de compte,
+  et tes messages ne quittent pas ta machine ;
+- "anthropic" : Claude, plus performant mais payant (clé API nécessaire,
+  lue par la bibliothèque anthropic dans ANTHROPIC_API_KEY).
 
-La clé API n'apparaît nulle part ici : la bibliothèque anthropic la lit
-elle-même dans la variable d'environnement ANTHROPIC_API_KEY.
-
-Fonctionnement : Claude peut utiliser des « outils » pendant sa réponse.
-- enregistrer_progression : il note dans la mémoire locale ce qu'il a
+Fonctionnement : l'IA peut utiliser des « outils » pendant sa réponse.
+- enregistrer_progression : elle note dans la mémoire locale ce qu'elle a
   observé (concepts compris ou fragiles, erreurs, niveau d'aide donné) ;
-- web_search (optionnel) : il cherche une information sur Internet.
-Quand Claude appelle un outil, on l'exécute, on lui renvoie le résultat,
-et il continue sa réponse : c'est la « boucle d'outils ».
+- web_search (Claude seulement, optionnel) : recherche sur Internet.
+Quand l'IA appelle un outil, on l'exécute, on lui renvoie le résultat,
+et elle continue sa réponse : c'est la « boucle d'outils ».
 """
 
+import json
+import os
+
 import anthropic
+import httpx
 
 from app.consignes import CONSIGNES_PROFESSEUR
 from app.parcours import CONCEPTS, ETATS
+
+# Fournisseur par défaut : gratuit et local.
+FOURNISSEUR_PAR_DEFAUT = "ollama"
+
+# Modèle local par défaut : bon en français, sait utiliser des outils,
+# environ 4,7 Go à télécharger, 8 Go de mémoire vive conseillés.
+# Pour un PC modeste : "qwen2.5:3b" (environ 2 Go).
+MODELE_OLLAMA_PAR_DEFAUT = "qwen2.5:7b"
+URL_OLLAMA_PAR_DEFAUT = "http://127.0.0.1:11434"
+
+
+class ErreurFournisseur(Exception):
+    """Erreur compréhensible venant du fournisseur d'IA (ex. Ollama non lancé)."""
+
+    def __init__(self, code_http, message):
+        super().__init__(message)
+        self.code_http = code_http
+        self.message = message
+
+
+def fournisseur():
+    """Le fournisseur choisi dans .env ("ollama" ou "anthropic")."""
+    return os.environ.get("FOURNISSEUR", FOURNISSEUR_PAR_DEFAUT).strip().lower()
+
+
+def modele_ollama():
+    return os.environ.get("MODELE_OLLAMA", MODELE_OLLAMA_PAR_DEFAUT).strip()
+
+
+def description():
+    """Texte affiché sur la page : quel professeur répond ?"""
+    if fournisseur() == "anthropic":
+        return {"fournisseur": "anthropic", "modele": MODELE, "gratuit": False,
+                "recherche_web": True}
+    return {"fournisseur": "ollama", "modele": modele_ollama(), "gratuit": True,
+            "recherche_web": False}
+
 
 # Le modèle Claude utilisé comme professeur (choisi par l'élève).
 MODELE = "claude-opus-5-5"
@@ -124,6 +166,22 @@ def demander_au_professeur(
     recherche_web=False,
     client=None,
 ):
+    """Envoie la conversation à l'IA choisie et renvoie la réponse (texte).
+
+    Les paramètres sont décrits dans _demander_a_claude et _demander_a_ollama.
+    """
+    if fournisseur() == "anthropic":
+        return _demander_a_claude(historique, contexte, executer_outil, recherche_web, client)
+    return _demander_a_ollama(historique, contexte, executer_outil, client)
+
+
+def _demander_a_claude(
+    historique,
+    contexte="",
+    executer_outil=_sans_outil,
+    recherche_web=False,
+    client=None,
+):
     """Envoie la conversation à Claude et renvoie la réponse du professeur (texte).
 
     historique : liste de messages, du plus ancien au plus récent, par ex.
@@ -203,5 +261,102 @@ def demander_au_professeur(
             continue
 
         break  # réponse terminée (end_turn, max_tokens...)
+
+    return "\n\n".join(morceaux)
+
+
+# ---------------------------------------------------------------------------
+# Ollama : IA gratuite et locale
+# ---------------------------------------------------------------------------
+
+# Le même outil de progression, au format attendu par Ollama.
+OUTIL_PROGRESSION_OLLAMA = {
+    "type": "function",
+    "function": {
+        "name": OUTIL_PROGRESSION["name"],
+        "description": OUTIL_PROGRESSION["description"],
+        "parameters": OUTIL_PROGRESSION["input_schema"],
+    },
+}
+
+
+def _demander_a_ollama(historique, contexte="", executer_outil=_sans_outil, client=None):
+    """Envoie la conversation au modèle local (Ollama) et renvoie la réponse.
+
+    On utilise l'API HTTP d'Ollama (POST /api/chat), qui tourne sur ton
+    ordinateur. client : un httpx.Client (les tests en fournissent un faux).
+    """
+    url = os.environ.get("OLLAMA_URL", URL_OLLAMA_PAR_DEFAUT).rstrip("/") + "/api/chat"
+    modele = modele_ollama()
+    # Un modèle local peut être lent : on lui laisse jusqu'à 10 minutes.
+    client = client or httpx.Client(timeout=600)
+
+    systeme = CONSIGNES_PROFESSEUR + ("\n\n" + contexte if contexte else "")
+    messages = [{"role": "system", "content": systeme}, *historique]
+    outils = [OUTIL_PROGRESSION_OLLAMA]
+    morceaux = []
+
+    for _ in range(MAX_TOURS):
+        corps = {
+            "model": modele,
+            "messages": messages,
+            "stream": False,
+            # Taille de la « mémoire de travail » du modèle (en tokens).
+            "options": {"num_ctx": 8192},
+        }
+        if outils:
+            corps["tools"] = outils
+
+        try:
+            reponse = client.post(url, json=corps)
+        except httpx.ConnectError:
+            raise ErreurFournisseur(
+                503,
+                "L'IA locale ne répond pas : lance l'application Ollama "
+                "(ou tape « ollama serve » dans un terminal).",
+            )
+        except httpx.TimeoutException:
+            raise ErreurFournisseur(
+                504, "L'IA locale a mis trop de temps à répondre. Réessaie."
+            )
+
+        if reponse.status_code == 404:
+            raise ErreurFournisseur(
+                500,
+                f"Le modèle « {modele} » n'est pas installé : tape "
+                f"« ollama pull {modele} » dans un terminal.",
+            )
+        if reponse.status_code == 400 and "does not support tools" in reponse.text and outils:
+            # Certains modèles ne savent pas utiliser d'outils : on continue
+            # sans (la progression ne sera alors pas enregistrée automatiquement).
+            outils = []
+            continue
+        if reponse.status_code != 200:
+            raise ErreurFournisseur(502, "Erreur de l'IA locale : " + reponse.text[:200])
+
+        message = reponse.json().get("message", {})
+        texte = (message.get("content") or "").strip()
+        if texte:
+            morceaux.append(texte)
+
+        appels = message.get("tool_calls") or []
+        if not appels:
+            break
+
+        # On renvoie le message de l'IA, puis le résultat de chaque outil.
+        messages.append(message)
+        for appel in appels:
+            fonction = appel.get("function", {})
+            arguments = fonction.get("arguments") or {}
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    arguments = {}
+            messages.append({
+                "role": "tool",
+                "tool_name": fonction.get("name", ""),
+                "content": executer_outil(fonction.get("name", ""), arguments),
+            })
 
     return "\n\n".join(morceaux)

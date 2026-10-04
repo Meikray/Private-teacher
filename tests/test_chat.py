@@ -113,3 +113,18 @@ def test_chat_cle_api_absente(monkeypatch):
     response = client.post("/chat", json=CONVERSATION)
     assert response.status_code == 500
     assert "vérifie ta clé API" in response.json()["detail"]
+
+
+def test_chat_erreur_du_fournisseur_local(monkeypatch):
+    def ollama_eteint(historique, **reglages):
+        raise ia.ErreurFournisseur(503, "L'IA locale ne répond pas.")
+
+    monkeypatch.setattr(ia, "demander_au_professeur", ollama_eteint)
+    response = client.post("/chat", json=CONVERSATION)
+    assert response.status_code == 503
+    assert response.json()["detail"] == "L'IA locale ne répond pas."
+
+
+def test_config(monkeypatch):
+    monkeypatch.setenv("FOURNISSEUR", "ollama")
+    assert client.get("/api/config").json()["gratuit"] is True

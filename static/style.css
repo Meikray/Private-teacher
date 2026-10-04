@@ -141,6 +141,16 @@ textarea {
   font-size: 0.9rem;
 }
 
+.badge-ia {
+  display: inline-block;
+  margin: 6px 0 0;
+  padding: 2px 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--texte-doux);
+}
+
 .onglets {
   display: flex;
   flex-wrap: wrap;

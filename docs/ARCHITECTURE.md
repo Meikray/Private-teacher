@@ -20,7 +20,7 @@ si un module change, les autres ne sont pas cassés.
 | Fichier | Rôle |
 |---|---|
 | `main.py` | Les **routes** de l'API (les adresses comme `/chat`). Il ne fait que relier les modules. |
-| `ia.py` | Le **seul** fichier qui parle à Claude : modèle, effort, option de secours, boucle d'outils. |
+| `ia.py` | Le **seul** fichier qui parle à une IA : Ollama (gratuit, local, par défaut) ou Claude (payant), boucle d'outils. |
 | `consignes.py` | Les consignes générales du professeur (le « prompt système »). |
 | `modes.py` | Le **registre des modes** : socratique, cours, explication de code, débogage, exercice, examen, diagnostic, révision, projet, plan d'étude. |
 | `parcours.py` | La **carte des connaissances** : domaines, concepts, prérequis, 7 états de maîtrise. |
@@ -110,10 +110,17 @@ Points importants :
   Internet : l'application fonctionne hors ligne et ne contacte aucun serveur
   extérieur.
 
-### Claude Opus 5.5 pour le professeur
-- **Choisi par l'élève** pour la finesse pédagogique.
-- Effort `medium`, option de secours `fallbacks="default"`.
-- Isolé dans `ia.py` : changer de modèle = changer la variable `MODELE`.
+### Ollama (gratuit) ou Claude (payant) pour le professeur
+- **Ollama par défaut**, pour que l'application soit **accessible sans payer** :
+  un modèle ouvert (`qwen2.5:7b`) tourne sur l'ordinateur de l'élève, via
+  l'API HTTP locale d'Ollama (`/api/chat`), avec le même outil de progression.
+  Avantages : gratuit, sans compte, rien ne quitte la machine. Limites :
+  moins fin que Claude, demande un PC correct (8 Go de mémoire vive).
+- **Claude Opus 5.5 en option** (`FOURNISSEUR=anthropic`) pour la meilleure
+  qualité pédagogique : effort `medium`, option de secours `fallbacks="default"`,
+  recherche web possible.
+- Les deux sont isolés dans `ia.py` : le reste de l'application ne sait pas
+  quelle IA répond.
 
 ### SQLite pour la mémoire
 - **Choisi parce que :** une base de données dans un simple fichier, rien à
@@ -131,7 +138,8 @@ Points importants :
 - La clé API est dans `.env`, **jamais** dans le code ni sur GitHub (`.gitignore`).
 - Toutes tes données personnelles restent sur ton ordinateur, dans `data/`
   (ignoré par Git) : mémoire (`professeur.db`) et documents.
-- Ce qui est envoyé à Claude (Anthropic) : la conversation, ton profil
+- En mode gratuit (Ollama), **rien ne quitte l'ordinateur**.
+- Avec Claude, ce qui est envoyé à Anthropic : la conversation, ton profil
   pédagogique résumé, et les passages de tes documents liés à ta question.
   C'est signalé dans l'onglet Documents.
 - La **dictée** au micro est désactivée par défaut : dans Chrome/Edge, l'audio
@@ -157,7 +165,9 @@ Le projet est conçu pour grandir **sans tout réécrire**. Voici où agir :
 | Ajouter un concept ou un domaine (il apparaît dans la carte 3D) | `app/parcours.py` (les tests vérifient prérequis et boucles) |
 | Ajouter un mode du professeur (il apparaît dans la liste) | `app/modes.py` |
 | Changer le comportement général du professeur | `app/consignes.py` |
+| Changer d'IA (gratuite / Claude) ou de modèle local | `.env` (`FOURNISSEUR`, `MODELE_OLLAMA`) |
 | Changer de modèle Claude ou d'effort | `app/ia.py` (`MODELE`, `EFFORT`) |
+| Ajouter un autre fournisseur d'IA | `app/ia.py` (une fonction `_demander_a_…`, appelée par `demander_au_professeur`) |
 | Donner un nouvel outil à Claude | `app/ia.py` (définition) + `app/main.py` (`executer_outil`) |
 | Améliorer la recherche dans les documents | `app/documents.py` (`rechercher`) |
 | Ajouter une information au tableau de bord | `app/memoire.py` (`tableau_de_bord`) + `static/js/panneaux.js` |

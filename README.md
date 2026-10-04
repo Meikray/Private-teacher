@@ -1,7 +1,9 @@
 # Private-teacher
 
 **Assistant Professeur Personnel** : un professeur particulier d'informatique,
-de programmation et d'IoT, propulsé par Claude.
+de programmation et d'IoT, **gratuit** : l'IA tourne sur ton ordinateur grâce à
+[Ollama](https://ollama.com). Tu peux aussi utiliser Claude (payant, plus
+performant) si tu le souhaites.
 
 Son but n'est pas de faire les exercices à ta place, mais de te rendre
 **autonome** : il pose des questions, donne des indices progressifs et vérifie
@@ -35,8 +37,13 @@ que tu as vraiment compris.
 
 - **Python 3.10 ou plus récent** (vérifie avec `python --version`).
 - **Git**, pour récupérer le projet.
-- **Une clé API Anthropic** : à créer sur ton compte, sur
-  [console.anthropic.com](https://console.anthropic.com), rubrique « API Keys ».
+- **Ollama**, l'IA gratuite qui tourne sur ton ordinateur :
+  - Windows / Mac : télécharge-le sur [ollama.com/download](https://ollama.com/download) ;
+  - Linux : `curl -fsSL https://ollama.com/install.sh | sh`.
+- Un ordinateur avec **8 Go de mémoire vive** au moins (le modèle conseillé,
+  `qwen2.5:7b`, pèse environ 4,7 Go ; pour un PC modeste, voir la section 6).
+
+Aucun compte ni aucune clé API n'est nécessaire en mode gratuit.
 
 ---
 
@@ -48,9 +55,10 @@ Après avoir récupéré le projet (étape 1 ci-dessous) :
 - **Mac / Linux** : dans un terminal, tape `./lancer_mac_linux.sh`.
 
 Le lanceur fait tout seul : il crée l'environnement virtuel, installe les
-bibliothèques, te demande ta clé API et l'enregistre dans `.env` (la première
-fois seulement), démarre le serveur et ouvre ton navigateur sur
-http://127.0.0.1:8000. Pour arrêter : ferme la fenêtre (ou `Ctrl + C`).
+bibliothèques, démarre Ollama, télécharge le modèle d'IA (la première fois
+seulement, plusieurs Go : sois patient), démarre le serveur et ouvre ton
+navigateur sur http://127.0.0.1:8000. Pour arrêter : ferme la fenêtre (ou
+`Ctrl + C`).
 
 Les étapes ci-dessous détaillent ce que fait le lanceur, si tu préfères tout
 faire à la main.
@@ -92,14 +100,20 @@ pip install -r requirements.txt
 
 `pip` installe toutes les bibliothèques listées dans `requirements.txt`.
 
-### Étape 4 — Mettre ta clé API
+### Étape 4 — Configurer et télécharger le modèle d'IA
 
 | Windows | Mac / Linux |
 |---|---|
 | `copy .env.example .env` | `cp .env.example .env` |
 
-Ouvre ensuite le fichier `.env` avec un éditeur de texte et remplace
-`mets-ta-cle-ici` par ta vraie clé.
+Puis télécharge le modèle d'IA gratuit (une seule fois) :
+
+```
+ollama pull qwen2.5:7b
+```
+
+Si tu utilises Claude à la place (payant), mets `FOURNISSEUR=anthropic` dans
+`.env` et remplace `mets-ta-cle-ici` par ta clé API.
 
 > ⚠️ **Ne partage jamais ta clé**, avec personne (pas même dans une
 > conversation avec une IA). Le fichier `.env` est déjà exclu de Git : il ne
@@ -128,7 +142,9 @@ Pour arrêter le serveur : `Ctrl + C` dans le terminal.
 
 | Message affiché | Ce qu'il faut vérifier |
 |---|---|
-| « Clé API manquante ou invalide » | Le fichier `.env` existe et contient la bonne clé. |
+| « L'IA locale ne répond pas » | Ollama est lancé (application ouverte, ou `ollama serve`). |
+| « Le modèle … n'est pas installé » | Tape la commande `ollama pull …` indiquée. |
+| « Clé API manquante ou invalide » (Claude) | Le fichier `.env` contient la bonne clé. |
 | « Problème de configuration de Claude » | Le fichier `.env` est bien dans le dossier du projet. |
 | « Impossible de joindre Claude » | Ta connexion Internet. |
 | « Trop de demandes » | Attends quelques secondes avant de réessayer. |
@@ -154,22 +170,36 @@ GitHub) :
 - `data/professeur.db` : ta mémoire pédagogique (concepts, erreurs, progrès) ;
 - `data/documents/` : le texte de tes documents importés.
 
-Ce qui est envoyé à Claude (Anthropic) pour qu'il te réponde : la conversation
-en cours, un résumé de ton profil pédagogique, et les passages de tes
-documents liés à ta question.
+**En mode gratuit (Ollama), rien ne quitte ton ordinateur** : l'IA tourne
+chez toi.
+
+Si tu choisis Claude, ce qui est envoyé à Anthropic pour qu'il te réponde : la
+conversation en cours, un résumé de ton profil pédagogique, et les passages de
+tes documents liés à ta question.
 
 ---
 
-## 6. Coût
+## 6. Coût et choix de l'IA
 
-L'API Claude est **payante**. Le professeur utilise le modèle Claude Opus 5.5 :
-compte environ **3 à 6 centimes de dollar par échange** (une question et sa
-réponse, y compris l'enregistrement de ta progression). Le coût réel dépend de
-la longueur des messages et des documents utilisés. Tu peux suivre ta
-consommation sur [console.anthropic.com](https://console.anthropic.com).
+Deux possibilités, à choisir dans le fichier `.env` (ligne `FOURNISSEUR=`) :
 
-La **recherche web** est désactivée par défaut (onglet Réglages) : quand elle
-est activée, chaque recherche est facturée en plus.
+| | `FOURNISSEUR=ollama` (par défaut) | `FOURNISSEUR=anthropic` |
+|---|---|---|
+| Prix | **Gratuit** | Payant : environ 3 à 6 centimes par échange |
+| Compte / clé | Aucun | Clé API sur [console.anthropic.com](https://console.anthropic.com) |
+| Vie privée | Tout reste sur ton ordinateur | Conversation envoyée à Anthropic |
+| Qualité | Correcte (dépend du modèle et de ton PC) | Excellente (Claude Opus 5.5) |
+| Recherche web | Non | Oui (en option, facturée en plus) |
+| Internet | Seulement pour télécharger le modèle | Nécessaire |
 
-Le modèle est défini à un seul endroit : la variable `MODELE` dans
-[`app/ia.py`](app/ia.py).
+**Choisir le modèle gratuit** (ligne `MODELE_OLLAMA=` dans `.env`) :
+
+- `qwen2.5:7b` : conseillé (environ 4,7 Go, 8 Go de mémoire vive) ;
+- `qwen2.5:3b` : pour un PC modeste (environ 2 Go), moins précis ;
+- `qwen2.5:14b` : meilleur, pour un PC puissant (environ 9 Go, 16 Go de mémoire).
+
+Après avoir changé de modèle, relance simplement le lanceur : il le télécharge.
+
+Avec un modèle local, le professeur est plus lent et un peu moins fin que
+Claude ; l'enregistrement automatique de ta progression peut aussi être moins
+régulier (tu peux toujours corriger ta mémoire dans l'onglet « Ma mémoire »).

@@ -114,7 +114,7 @@ def chat(donnees: Conversation) -> ReponseProfesseur:
     concepts_mis_a_jour = []
 
     def executer_outil(nom, entree):
-        """Appelée quand Claude utilise l'outil de progression."""
+        """Appelée quand l'IA utilise l'outil de progression."""
         if nom != "enregistrer_progression":
             return "Outil inconnu."
         resultat = memoire.appliquer_progression(entree)
@@ -132,6 +132,8 @@ def chat(donnees: Conversation) -> ReponseProfesseur:
             executer_outil=executer_outil,
             recherche_web=donnees.recherche_web,
         )
+    except ia.ErreurFournisseur as erreur:
+        raise HTTPException(status_code=erreur.code_http, detail=erreur.message)
     except anthropic.AuthenticationError:
         raise HTTPException(
             status_code=500,
@@ -164,6 +166,12 @@ def chat(donnees: Conversation) -> ReponseProfesseur:
 # ---------------------------------------------------------------------------
 # Informations pour la page : modes, parcours, tableau de bord
 # ---------------------------------------------------------------------------
+
+
+@app.get("/api/config")
+def config():
+    """Quel professeur répond (IA locale gratuite ou Claude) ?"""
+    return ia.description()
 
 
 @app.get("/api/modes")

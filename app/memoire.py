@@ -380,18 +380,37 @@ def appliquer_progression(entree):
          "niveau_aide": 0-6, "exercice": "...", "demande_solution_directe": bool}
     Renvoie les identifiants des concepts mis à jour et ceux qui ont été ignorés.
     """
+    # Les données viennent d'une IA : on vérifie chaque valeur avant de
+    # l'enregistrer (un petit modèle local peut se tromper de format).
+    def entier(valeur, defaut=0):
+        try:
+            return int(valeur)
+        except (TypeError, ValueError):
+            return defaut
+
+    def liste(cle):
+        valeur = entree.get(cle) if isinstance(entree, dict) else None
+        return [v for v in valeur if isinstance(v, dict)] if isinstance(valeur, list) else []
+
     mis_a_jour, ignores = [], []
-    for concept in entree.get("concepts", []):
-        if mettre_a_jour_concept(concept["id"], concept["etat"], concept.get("remarque", "")):
-            mis_a_jour.append(concept["id"])
+    for concept in liste("concepts"):
+        concept_id = str(concept.get("id", ""))
+        if mettre_a_jour_concept(concept_id, entier(concept.get("etat"), -1),
+                                 str(concept.get("remarque", ""))):
+            mis_a_jour.append(concept_id)
         else:
-            ignores.append(concept["id"])
-    for erreur in entree.get("erreurs", []):
-        ajouter_erreur(erreur["concept"], erreur["description"])
+            ignores.append(concept_id)
+    for erreur in liste("erreurs"):
+        if erreur.get("description"):
+            ajouter_erreur(str(erreur.get("concept", "")), str(erreur["description"]))
+
+    exercice = entree.get("exercice") if isinstance(entree, dict) else None
+    if exercice not in ("aucun", "reussi_sans_aide", "reussi_avec_aide", "echoue"):
+        exercice = "aucun"
     enregistrer_aide(
-        entree.get("niveau_aide", 0),
-        entree.get("demande_solution_directe", False),
-        entree.get("exercice", "aucun"),
+        min(max(entier(entree.get("niveau_aide") if isinstance(entree, dict) else 0), 0), 6),
+        bool(entree.get("demande_solution_directe")) if isinstance(entree, dict) else False,
+        exercice,
     )
     return {"mis_a_jour": mis_a_jour, "ignores": ignores}
 

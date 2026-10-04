@@ -11,8 +11,16 @@ import json
 
 import anthropic
 import httpx2
+import pytest
 
 from app import ia
+
+
+@pytest.fixture(autouse=True)
+def fournisseur_claude(monkeypatch):
+    # Ces tests concernent Claude : on choisit ce fournisseur.
+    monkeypatch.setenv("FOURNISSEUR", "anthropic")
+
 
 # Deux réponses simulées de l'API : d'abord un appel d'outil, puis le texte final.
 REPONSES = [

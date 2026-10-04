@@ -6,8 +6,16 @@ pas de coût.
 
 from types import SimpleNamespace
 
+import pytest
+
 from app import ia
 from app.consignes import CONSIGNES_PROFESSEUR
+
+
+@pytest.fixture(autouse=True)
+def fournisseur_claude(monkeypatch):
+    # Ces tests concernent Claude : on choisit ce fournisseur.
+    monkeypatch.setenv("FOURNISSEUR", "anthropic")
 
 
 class FauxClient:

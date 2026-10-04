@@ -25,7 +25,7 @@ import httpx
 from pypdf import PdfReader
 
 TAILLE_MAX_TELECHARGEMENT = 3 * 1024 * 1024  # 3 Mo
-LONGUEUR_MAX_TEXTE = 6000  # caractères renvoyés à l'IA
+LONGUEUR_MAX_TEXTE = 4000  # caractères renvoyés à l'IA (assez court pour un modèle local)
 DELAI = 20  # secondes
 MAX_REDIRECTIONS = 5
 

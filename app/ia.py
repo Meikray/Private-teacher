@@ -24,7 +24,7 @@ import anthropic
 import httpx
 
 from app import internet
-from app.consignes import CONSIGNES_PROFESSEUR
+from app.consignes import CONSIGNES_COURTES, CONSIGNES_PROFESSEUR
 from app.parcours import CONCEPTS, ETATS
 
 # Fournisseur par défaut : gratuit et local.
@@ -271,54 +271,119 @@ def _demander_a_claude(
 # ---------------------------------------------------------------------------
 # Ollama : IA gratuite et locale
 # ---------------------------------------------------------------------------
+#
+# Un modèle local tourne sur le processeur de l'élève : chaque mot envoyé
+# au modèle coûte du temps. On utilise donc une version ALLÉGÉE de tout :
+# consignes courtes, outil de progression compact, mémoire de travail
+# raisonnable. Et on « diffuse » la réponse mot par mot (streaming) pour que
+# l'élève voie le professeur écrire au lieu d'attendre devant un écran figé.
 
-# Le même outil de progression, au format attendu par Ollama.
+# Outil de progression compact : seulement les identifiants des concepts
+# (les noms complets prendraient trop de place pour un petit modèle).
 OUTIL_PROGRESSION_OLLAMA = {
     "type": "function",
     "function": {
         "name": OUTIL_PROGRESSION["name"],
-        "description": OUTIL_PROGRESSION["description"],
+        "description": (
+            "Enregistre ce que tu as observé chez l'élève (concepts compris ou "
+            "fragiles, erreurs). Appelle-le seulement quand tu observes quelque "
+            "chose de nouveau. États : 0 non rencontré, 1 découverte, 2 fragile, "
+            "3 correct, 4 maîtrisé, 5 maîtrisé en pratique, 6 autonome. "
+            "Identifiants valides : " + ", ".join(c["id"] for c in CONCEPTS)
+        ),
         "parameters": OUTIL_PROGRESSION["input_schema"],
     },
 }
 
+# Le modèle reste chargé en mémoire 30 minutes après le dernier message
+# (par défaut Ollama le décharge après 5 minutes, et le recharger est lent).
+GARDER_EN_MEMOIRE = "30m"
 
-def _demander_a_ollama(
+
+def _url_ollama():
+    return os.environ.get("OLLAMA_URL", URL_OLLAMA_PAR_DEFAUT).rstrip("/") + "/api/chat"
+
+
+def _erreur_http_ollama(statut, texte, modele):
+    """Traduit une erreur d'Ollama en message compréhensible."""
+    if statut == 404:
+        return ErreurFournisseur(
+            500,
+            f"Le modèle « {modele} » n'est pas installé : tape "
+            f"« ollama pull {modele} » dans un terminal.",
+        )
+    if "memory" in texte.lower():
+        return ErreurFournisseur(
+            507,
+            "Ton ordinateur n'a pas assez de mémoire pour ce modèle. Dans le "
+            "fichier .env, remplace le modèle par MODELE_OLLAMA=qwen2.5:3b puis relance.",
+        )
+    return ErreurFournisseur(502, "Erreur de l'IA locale : " + texte[:200])
+
+
+def flux_ollama(
     historique, contexte="", executer_outil=_sans_outil, recherche_web=False, client=None,
 ):
-    """Envoie la conversation au modèle local (Ollama) et renvoie la réponse.
+    """Interroge le modèle local et DIFFUSE la réponse, morceau par morceau.
 
-    On utilise l'API HTTP d'Ollama (POST /api/chat), qui tourne sur ton
-    ordinateur. client : un httpx.Client (les tests en fournissent un faux).
+    C'est un « générateur » (mot-clé yield) : il renvoie des événements au fur
+    et à mesure, sous forme de dictionnaires :
+        {"type": "texte", "contenu": "un morceau de réponse"}
+        {"type": "statut", "contenu": "Lecture de https://..."}
+    client : un httpx.Client (les tests en fournissent un faux).
     """
-    url = os.environ.get("OLLAMA_URL", URL_OLLAMA_PAR_DEFAUT).rstrip("/") + "/api/chat"
     modele = modele_ollama()
-    # Un modèle local peut être lent : on lui laisse jusqu'à 10 minutes.
-    client = client or httpx.Client(timeout=600)
+    # Pas de limite pour lire la réponse (un modèle local peut être lent),
+    # mais 10 secondes maximum pour se connecter à Ollama.
+    client = client or httpx.Client(timeout=httpx.Timeout(None, connect=10))
 
-    systeme = CONSIGNES_PROFESSEUR + ("\n\n" + contexte if contexte else "")
+    systeme = CONSIGNES_COURTES + ("\n\n" + contexte if contexte else "")
     outils = [OUTIL_PROGRESSION_OLLAMA]
     if recherche_web:
         outils += internet.OUTILS_INTERNET
         systeme += "\n\n" + internet.CONSIGNE_INTERNET
     messages = [{"role": "system", "content": systeme}, *historique]
-    # Taille de la « mémoire de travail » du modèle (en tokens). Plus grande
-    # avec Internet, car les pages lues prennent de la place.
-    contexte_max = int(os.environ.get("CONTEXTE_OLLAMA", 16384 if recherche_web else 8192))
-    morceaux = []
+    # Taille de la « mémoire de travail » (en tokens). Plus elle est grande,
+    # plus il faut de mémoire vive : 8192 convient à la plupart des PC.
+    contexte_max = int(os.environ.get("CONTEXTE_OLLAMA", 8192))
+    deja_ecrit = False  # pour séparer les morceaux de texte de deux tours
 
     for _ in range(MAX_TOURS):
         corps = {
             "model": modele,
             "messages": messages,
-            "stream": False,
+            "stream": True,
+            "keep_alive": GARDER_EN_MEMOIRE,
             "options": {"num_ctx": contexte_max},
         }
         if outils:
             corps["tools"] = outils
 
+        contenu_tour, appels, sans_outils = "", [], False
         try:
-            reponse = client.post(url, json=corps)
+            with client.stream("POST", _url_ollama(), json=corps) as reponse:
+                if reponse.status_code != 200:
+                    texte = reponse.read().decode("utf-8", errors="replace")
+                    if reponse.status_code == 400 and "does not support tools" in texte and outils:
+                        sans_outils = True
+                    else:
+                        raise _erreur_http_ollama(reponse.status_code, texte, modele)
+                else:
+                    # Ollama envoie une ligne JSON par morceau de réponse.
+                    for ligne in reponse.iter_lines():
+                        if not ligne.strip():
+                            continue
+                        morceau = json.loads(ligne)
+                        if morceau.get("error"):
+                            raise _erreur_http_ollama(500, morceau["error"], modele)
+                        message = morceau.get("message", {})
+                        texte = message.get("content") or ""
+                        if texte:
+                            if deja_ecrit and not contenu_tour:
+                                yield {"type": "texte", "contenu": "\n\n"}
+                            contenu_tour += texte
+                            yield {"type": "texte", "contenu": texte}
+                        appels += message.get("tool_calls") or []
         except httpx.ConnectError:
             raise ErreurFournisseur(
                 503,
@@ -326,35 +391,18 @@ def _demander_a_ollama(
                 "(ou tape « ollama serve » dans un terminal).",
             )
         except httpx.TimeoutException:
-            raise ErreurFournisseur(
-                504, "L'IA locale a mis trop de temps à répondre. Réessaie."
-            )
+            raise ErreurFournisseur(504, "L'IA locale a mis trop de temps à répondre. Réessaie.")
 
-        if reponse.status_code == 404:
-            raise ErreurFournisseur(
-                500,
-                f"Le modèle « {modele} » n'est pas installé : tape "
-                f"« ollama pull {modele} » dans un terminal.",
-            )
-        if reponse.status_code == 400 and "does not support tools" in reponse.text and outils:
-            # Certains modèles ne savent pas utiliser d'outils : on continue
-            # sans (la progression ne sera alors pas enregistrée automatiquement).
+        if sans_outils:
+            # Ce modèle ne sait pas utiliser d'outils : on réessaie sans.
             outils = []
             continue
-        if reponse.status_code != 200:
-            raise ErreurFournisseur(502, "Erreur de l'IA locale : " + reponse.text[:200])
-
-        message = reponse.json().get("message", {})
-        texte = (message.get("content") or "").strip()
-        if texte:
-            morceaux.append(texte)
-
-        appels = message.get("tool_calls") or []
+        deja_ecrit = deja_ecrit or bool(contenu_tour.strip())
         if not appels:
             break
 
         # On renvoie le message de l'IA, puis le résultat de chaque outil.
-        messages.append(message)
+        messages.append({"role": "assistant", "content": contenu_tour, "tool_calls": appels})
         for appel in appels:
             fonction = appel.get("function", {})
             arguments = fonction.get("arguments") or {}
@@ -364,10 +412,39 @@ def _demander_a_ollama(
                 except json.JSONDecodeError:
                     arguments = {}
             nom = fonction.get("name", "")
+            if nom == "lire_page_web":
+                yield {"type": "statut", "contenu": f"Lecture de {arguments.get('url', '')}…"}
+            elif nom == "rechercher_wikipedia":
+                yield {"type": "statut", "contenu": f"Recherche sur Wikipédia : {arguments.get('requete', '')}…"}
             if nom in internet.NOMS_OUTILS_INTERNET:
                 resultat = internet.executer(nom, arguments)
             else:
                 resultat = executer_outil(nom, arguments)
             messages.append({"role": "tool", "tool_name": nom, "content": resultat})
 
-    return "\n\n".join(morceaux)
+
+def _demander_a_ollama(
+    historique, contexte="", executer_outil=_sans_outil, recherche_web=False, client=None,
+):
+    """Version « tout d'un coup » : attend la fin et renvoie le texte complet."""
+    return "".join(
+        evenement["contenu"]
+        for evenement in flux_ollama(historique, contexte, executer_outil, recherche_web, client)
+        if evenement["type"] == "texte"
+    ).strip()
+
+
+def demander_en_flux(
+    historique, contexte="", executer_outil=_sans_outil, recherche_web=False, client=None,
+):
+    """Comme demander_au_professeur, mais en diffusant la réponse (générateur).
+
+    Avec Claude, la réponse arrive en un seul morceau (assez rapide).
+    """
+    if fournisseur() == "anthropic":
+        yield {
+            "type": "texte",
+            "contenu": _demander_a_claude(historique, contexte, executer_outil, recherche_web, client),
+        }
+    else:
+        yield from flux_ollama(historique, contexte, executer_outil, recherche_web, client)

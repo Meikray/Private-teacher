@@ -145,6 +145,8 @@ Pour arrêter le serveur : `Ctrl + C` dans le terminal.
 
 | Message affiché | Ce qu'il faut vérifier |
 |---|---|
+| Le professeur est **très lent** | Normal sans carte graphique. Essaie le modèle léger : `MODELE_OLLAMA=qwen2.5:3b` dans `.env`, puis relance. Désactive 🌐 Internet si tu n'en as pas besoin. |
+| « pas assez de mémoire » / le PC rame | Ferme les autres applications, ou passe à `qwen2.5:3b`. |
 | « L'IA locale ne répond pas » | Ollama est lancé (application ouverte, ou `ollama serve`). |
 | « Le modèle … n'est pas installé » | Tape la commande `ollama pull …` indiquée. |
 | « Clé API manquante ou invalide » (Claude) | Le fichier `.env` contient la bonne clé. |

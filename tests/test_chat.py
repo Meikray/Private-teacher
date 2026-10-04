@@ -5,6 +5,8 @@ pas de coût. monkeypatch remplace temporairement (le temps d'un test)
 la vraie fonction demander_au_professeur par une fausse.
 """
 
+import json
+
 import anthropic
 import httpx2
 from fastapi.testclient import TestClient
@@ -128,3 +130,42 @@ def test_chat_erreur_du_fournisseur_local(monkeypatch):
 def test_config(monkeypatch):
     monkeypatch.setenv("FOURNISSEUR", "ollama")
     assert client.get("/api/config").json()["gratuit"] is True
+
+
+def lire_flux(reponse):
+    return [json.loads(ligne) for ligne in reponse.text.splitlines() if ligne]
+
+
+def test_chat_flux(monkeypatch):
+    def faux_flux(historique, executer_outil, **reglages):
+        yield {"type": "texte", "contenu": "Bon"}
+        yield {"type": "texte", "contenu": "jour"}
+        executer_outil("enregistrer_progression", {
+            "concepts": [{"id": "variable", "etat": 2, "remarque": ""}],
+            "erreurs": [], "niveau_aide": 1, "exercice": "aucun",
+            "demande_solution_directe": False,
+        })
+
+    monkeypatch.setattr(ia, "demander_en_flux", faux_flux)
+    reponse = client.post("/chat/flux", json=CONVERSATION)
+    assert reponse.status_code == 200
+    assert lire_flux(reponse) == [
+        {"type": "texte", "contenu": "Bon"},
+        {"type": "texte", "contenu": "jour"},
+        {"type": "fin", "concepts_mis_a_jour": ["variable"]},
+    ]
+
+
+def test_chat_flux_erreur(monkeypatch):
+    def flux_en_panne(historique, **reglages):
+        yield {"type": "texte", "contenu": "Début"}
+        raise ia.ErreurFournisseur(503, "L'IA locale ne répond pas.")
+
+    monkeypatch.setattr(ia, "demander_en_flux", flux_en_panne)
+    evenements = lire_flux(client.post("/chat/flux", json=CONVERSATION))
+    assert evenements[-1] == {"type": "erreur", "contenu": "L'IA locale ne répond pas."}
+
+
+def test_chat_flux_verifie_les_donnees():
+    reponse = client.post("/chat/flux", json={**CONVERSATION, "mode": "triche"})
+    assert reponse.status_code == 422

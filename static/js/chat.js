@@ -1,7 +1,7 @@
 // Discussion avec le professeur.
 // Rôle : garder l'historique, l'envoyer au serveur, afficher les réponses.
 
-import { element, emettre, ecouter, envoyer, lire as lireApi } from "./api.js";
+import { element, emettre, ecouter, lire as lireApi } from "./api.js";
 import { markdownVersHtml } from "./markdown.js";
 import { lireReglages, modifierReglage } from "./reglages.js";
 import * as voix from "./voix.js";
@@ -71,7 +71,26 @@ async function afficherAccueil() {
   }
 }
 
-// Envoie un message au professeur et affiche sa réponse.
+// Lit la réponse « diffusée » par le serveur (/chat/flux) : une ligne JSON
+// par événement. Appelle surEvenement(evenement) pour chacun.
+async function lireFlux(reponse, surEvenement) {
+  const lecteur = reponse.body.getReader();
+  const decodeur = new TextDecoder();
+  let reste = ""; // morceau de ligne pas encore complet
+  for (;;) {
+    const { value, done } = await lecteur.read();
+    if (done) break;
+    reste += decodeur.decode(value, { stream: true });
+    const lignes = reste.split("\n");
+    reste = lignes.pop();
+    for (const ligne of lignes) {
+      if (ligne.trim()) surEvenement(JSON.parse(ligne));
+    }
+  }
+  if (reste.trim()) surEvenement(JSON.parse(reste));
+}
+
+// Envoie un message au professeur et affiche sa réponse AU FUR ET À MESURE.
 async function envoyerMessage(texte) {
   if (enCours) return;
   enCours = true;
@@ -80,29 +99,75 @@ async function envoyerMessage(texte) {
 
   afficherMessage(texte, "eleve");
   historique.push({ role: "user", content: texte });
-  const attente = afficherMessage("Le professeur réfléchit…", "attente");
   const reglages = lireReglages();
 
+  // Bulle d'attente avec un compteur de secondes : on voit que ça avance.
+  const attente = afficherMessage("Le professeur réfléchit… 0 s", "attente");
+  const debut = Date.now();
+  let statut = "Le professeur réfléchit…";
+  const minuteur = setInterval(() => {
+    attente.textContent = `${statut} ${Math.round((Date.now() - debut) / 1000)} s`;
+  }, 1000);
+
+  let bulle = null; // bulle de la réponse, créée au premier morceau de texte
+  let reponseTexte = "";
+  let fin = null;
+  let erreurFlux = null;
+
   try {
-    const donnees = await envoyer("/chat", {
-      historique,
-      mode: choixMode.value,
-      detail: reglages.detail,
-      recherche_web: reglages.rechercheWeb,
+    const reponse = await fetch("/chat/flux", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        historique,
+        mode: choixMode.value,
+        detail: reglages.detail,
+        recherche_web: reglages.rechercheWeb,
+      }),
     });
-    attente.remove();
-    afficherMessage(donnees.reponse, "professeur");
-    historique.push({ role: "assistant", content: donnees.reponse });
-    if (reglages.lectureVocale) voix.lire(donnees.reponse);
+    if (!reponse.ok) {
+      const erreur = await reponse.json().catch(() => ({}));
+      throw new Error(typeof erreur.detail === "string" ? erreur.detail : "Erreur du serveur.");
+    }
+
+    await lireFlux(reponse, (evenement) => {
+      if (evenement.type === "texte") {
+        if (!bulle) {
+          bulle = afficherMessage("", "professeur");
+          // On garde la bulle d'attente sous la réponse pour le statut.
+          attente.hidden = true;
+        }
+        reponseTexte += evenement.contenu;
+        // On réaffiche le Markdown à chaque morceau (conversion sûre).
+        bulle.innerHTML = markdownVersHtml(reponseTexte);
+        conversation.scrollTop = conversation.scrollHeight;
+      } else if (evenement.type === "statut") {
+        statut = evenement.contenu;
+        attente.hidden = false;
+        conversation.appendChild(attente); // le statut passe en bas
+      } else if (evenement.type === "erreur") {
+        erreurFlux = evenement.contenu;
+      } else if (evenement.type === "fin") {
+        fin = evenement;
+      }
+    });
+
+    if (erreurFlux || !fin) {
+      throw new Error(erreurFlux || "La réponse a été interrompue. Réessaie.");
+    }
+    historique.push({ role: "assistant", content: reponseTexte });
+    if (reglages.lectureVocale) voix.lire(reponseTexte);
     // Prévient la carte 3D et les panneaux que la mémoire a pu changer.
-    emettre("memoire-modifiee", donnees.concepts_mis_a_jour);
+    emettre("memoire-modifiee", fin.concepts_mis_a_jour);
   } catch (erreur) {
-    attente.remove();
-    // On retire ton dernier message de l'historique : tu pourras le renvoyer
-    // sans créer de doublon.
+    // Réponse incomplète : on la retire, ainsi que ton dernier message de
+    // l'historique (tu pourras le renvoyer sans créer de doublon).
+    if (bulle) bulle.remove();
     historique.pop();
     afficherMessage(erreur.message, "erreur");
   } finally {
+    clearInterval(minuteur);
+    attente.remove();
     enCours = false;
     boutonEnvoyer.disabled = false;
     champMessage.focus();

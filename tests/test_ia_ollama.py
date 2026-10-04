@@ -41,8 +41,11 @@ def test_reponse_simple():
     assert reponse == "À ton avis ?"
     corps = requetes[0]
     assert corps["model"] == "qwen2.5:7b"
-    assert corps["stream"] is False
+    assert corps["stream"] is True
+    assert corps["keep_alive"] == "30m"
+    assert corps["options"]["num_ctx"] == 8192
     assert corps["messages"][0]["role"] == "system"
+    assert corps["messages"][0]["content"].startswith(ia.CONSIGNES_COURTES)
     assert corps["messages"][0]["content"].endswith("MODE TEST")
     assert corps["messages"][1:] == HISTORIQUE
     assert corps["tools"][0]["function"]["name"] == "enregistrer_progression"
@@ -118,7 +121,6 @@ def test_outils_internet_proposes_et_executes(monkeypatch):
     noms = [o["function"]["name"] for o in requetes[0]["tools"]]
     assert noms == ["enregistrer_progression", "lire_page_web", "rechercher_wikipedia"]
     assert "ACCÈS À INTERNET" in requetes[0]["messages"][0]["content"]
-    assert requetes[0]["options"]["num_ctx"] == 16384
     assert requetes[1]["messages"][-1]["content"] == "[lire_page_web] https://exemple.org"
 
 
@@ -126,3 +128,40 @@ def test_sans_internet_pas_d_outils_web():
     client, requetes = faux_ollama([(200, {"message": {"role": "assistant", "content": "ok"}})])
     ia.demander_au_professeur(HISTORIQUE, recherche_web=False, client=client)
     assert [o["function"]["name"] for o in requetes[0]["tools"]] == ["enregistrer_progression"]
+
+
+
+def test_diffusion_mot_par_mot():
+    # Ollama envoie la réponse en plusieurs lignes JSON (une par morceau).
+    lignes = "\n".join([
+        '{"message": {"role": "assistant", "content": "Une "}, "done": false}',
+        '{"message": {"role": "assistant", "content": "variable"}, "done": false}',
+        '{"message": {"role": "assistant", "content": " ?"}, "done": true}',
+    ])
+    client, _ = faux_ollama([(200, lignes)])
+    evenements = list(ia.demander_en_flux(HISTORIQUE, client=client))
+    assert evenements == [
+        {"type": "texte", "contenu": "Une "},
+        {"type": "texte", "contenu": "variable"},
+        {"type": "texte", "contenu": " ?"},
+    ]
+
+
+def test_statut_pendant_la_lecture_d_une_page(monkeypatch):
+    monkeypatch.setattr(ia.internet, "executer", lambda nom, args: "contenu")
+    appel = {"function": {"name": "lire_page_web", "arguments": {"url": "https://exemple.org"}}}
+    client, _ = faux_ollama([
+        (200, {"message": {"role": "assistant", "content": "", "tool_calls": [appel]}}),
+        (200, {"message": {"role": "assistant", "content": "Voilà."}}),
+    ])
+    evenements = list(ia.demander_en_flux(HISTORIQUE, recherche_web=True, client=client))
+    assert evenements == [
+        {"type": "statut", "contenu": "Lecture de https://exemple.org…"},
+        {"type": "texte", "contenu": "Voilà."},
+    ]
+
+
+def test_memoire_insuffisante():
+    client, _ = faux_ollama([(500, '{"error":"model requires more system memory (9 GiB) than is available"}')])
+    with pytest.raises(ia.ErreurFournisseur, match="qwen2.5:3b"):
+        ia.demander_au_professeur(HISTORIQUE, client=client)

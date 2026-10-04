@@ -9,13 +9,14 @@ travail est fait par les modules spécialisés :
 - app/parcours.py  : la carte des concepts.
 """
 
+import json
 from pathlib import Path
 from typing import Literal
 
 import anthropic
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -98,9 +99,8 @@ def construire_contexte(donnees):
     return "\n\n".join(morceaux)
 
 
-# @app.post (et non @app.get) : la page ENVOIE des données au serveur.
-@app.post("/chat")
-def chat(donnees: Conversation) -> ReponseProfesseur:
+def verifier(donnees):
+    """Vérifications communes aux deux routes de discussion."""
     if donnees.mode not in MODES:
         raise HTTPException(status_code=422, detail="Mode inconnu.")
     if donnees.historique[-1].role != "user":
@@ -108,13 +108,13 @@ def chat(donnees: Conversation) -> ReponseProfesseur:
             status_code=422, detail="Le dernier message doit venir de l'élève."
         )
 
-    # model_dump() transforme chaque Message en simple dictionnaire Python,
-    # le format attendu par le module IA.
-    historique = [message.model_dump() for message in donnees.historique]
-    concepts_mis_a_jour = []
 
+def creer_executeur(concepts_mis_a_jour):
+    """Crée la fonction appelée quand l'IA utilise l'outil de progression.
+
+    Les concepts mis à jour sont ajoutés à la liste concepts_mis_a_jour.
+    """
     def executer_outil(nom, entree):
-        """Appelée quand l'IA utilise l'outil de progression."""
         if nom != "enregistrer_progression":
             return "Outil inconnu."
         resultat = memoire.appliquer_progression(entree)
@@ -123,44 +123,85 @@ def chat(donnees: Conversation) -> ReponseProfesseur:
             return "Enregistré. Identifiants inconnus ignorés : " + ", ".join(resultat["ignores"])
         return "Progression enregistrée."
 
-    # On transforme chaque erreur possible en message compréhensible.
-    # L'ordre compte : on teste les erreurs les plus précises d'abord.
+    return executer_outil
+
+
+def traduire_erreur(erreur):
+    """Transforme une erreur de l'IA en (code HTTP, message compréhensible).
+
+    L'ordre compte : on teste les erreurs les plus précises d'abord.
+    Renvoie None si l'erreur n'est pas une erreur connue de l'IA.
+    """
+    if isinstance(erreur, ia.ErreurFournisseur):
+        return erreur.code_http, erreur.message
+    if isinstance(erreur, anthropic.AuthenticationError):
+        return 500, "Clé API manquante ou invalide : vérifie ton fichier .env."
+    if isinstance(erreur, anthropic.RateLimitError):
+        return 429, "Trop de demandes, réessaie dans un instant."
+    if isinstance(erreur, anthropic.APIConnectionError):
+        return 503, "Impossible de joindre Claude. Vérifie ta connexion."
+    if isinstance(erreur, anthropic.APIError):
+        return 502, "Erreur du service Claude."
+    if isinstance(erreur, anthropic.AnthropicError):
+        # Dernier filet de sécurité : par exemple une clé API introuvable.
+        return 500, "Problème de configuration de Claude : vérifie ta clé API dans le fichier .env."
+    return None
+
+
+# @app.post (et non @app.get) : la page ENVOIE des données au serveur.
+# Cette route renvoie la réponse complète d'un coup (utile pour les tests
+# et pour d'autres programmes). La page web utilise /chat/flux ci-dessous.
+@app.post("/chat")
+def chat(donnees: Conversation) -> ReponseProfesseur:
+    verifier(donnees)
+    # model_dump() transforme chaque Message en simple dictionnaire Python,
+    # le format attendu par le module IA.
+    historique = [message.model_dump() for message in donnees.historique]
+    concepts_mis_a_jour = []
     try:
         texte = ia.demander_au_professeur(
             historique,
             contexte=construire_contexte(donnees),
-            executer_outil=executer_outil,
+            executer_outil=creer_executeur(concepts_mis_a_jour),
             recherche_web=donnees.recherche_web,
         )
-    except ia.ErreurFournisseur as erreur:
-        raise HTTPException(status_code=erreur.code_http, detail=erreur.message)
-    except anthropic.AuthenticationError:
-        raise HTTPException(
-            status_code=500,
-            detail="Clé API manquante ou invalide : vérifie ton fichier .env.",
-        )
-    except anthropic.RateLimitError:
-        raise HTTPException(
-            status_code=429,
-            detail="Trop de demandes, réessaie dans un instant.",
-        )
-    except anthropic.APIConnectionError:
-        raise HTTPException(
-            status_code=503,
-            detail="Impossible de joindre Claude. Vérifie ta connexion.",
-        )
-    except anthropic.APIError:
-        raise HTTPException(status_code=502, detail="Erreur du service Claude.")
-    except anthropic.AnthropicError:
-        # Dernier filet de sécurité : toute autre erreur de la bibliothèque,
-        # par exemple une clé API introuvable (fichier .env absent).
-        raise HTTPException(
-            status_code=500,
-            detail="Problème de configuration de Claude : vérifie ta clé API dans le fichier .env.",
-        )
+    except (ia.ErreurFournisseur, anthropic.AnthropicError) as erreur:
+        code, message = traduire_erreur(erreur)
+        raise HTTPException(status_code=code, detail=message)
 
     memoire.enregistrer_activite("message")
     return ReponseProfesseur(reponse=texte, concepts_mis_a_jour=concepts_mis_a_jour)
+
+
+# Même chose, mais la réponse est DIFFUSÉE au fur et à mesure : la page
+# affiche le texte pendant que le professeur l'écrit. Format « NDJSON » :
+# une ligne JSON par événement ({"type": "texte" | "statut" | "erreur" | "fin", ...}).
+@app.post("/chat/flux")
+def chat_flux(donnees: Conversation):
+    verifier(donnees)
+    historique = [message.model_dump() for message in donnees.historique]
+    contexte = construire_contexte(donnees)
+    concepts_mis_a_jour = []
+
+    def evenements():
+        ligne = lambda evenement: json.dumps(evenement, ensure_ascii=False) + "\n"
+        try:
+            for evenement in ia.demander_en_flux(
+                historique,
+                contexte=contexte,
+                executer_outil=creer_executeur(concepts_mis_a_jour),
+                recherche_web=donnees.recherche_web,
+            ):
+                yield ligne(evenement)
+        except (ia.ErreurFournisseur, anthropic.AnthropicError) as erreur:
+            # La réponse a déjà commencé : on ne peut plus changer le code
+            # HTTP, donc l'erreur est envoyée comme un événement.
+            yield ligne({"type": "erreur", "contenu": traduire_erreur(erreur)[1]})
+            return
+        memoire.enregistrer_activite("message")
+        yield ligne({"type": "fin", "concepts_mis_a_jour": concepts_mis_a_jour})
+
+    return StreamingResponse(evenements(), media_type="application/x-ndjson")
 
 
 # ---------------------------------------------------------------------------

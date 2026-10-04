@@ -48,8 +48,8 @@ Après avoir récupéré le projet (étape 1 ci-dessous) :
 - **Mac / Linux** : dans un terminal, tape `./lancer_mac_linux.sh`.
 
 Le lanceur fait tout seul : il crée l'environnement virtuel, installe les
-bibliothèques, ouvre le fichier `.env` pour que tu y colles ta clé API (la
-première fois seulement), démarre le serveur et ouvre ton navigateur sur
+bibliothèques, te demande ta clé API et l'enregistre dans `.env` (la première
+fois seulement), démarre le serveur et ouvre ton navigateur sur
 http://127.0.0.1:8000. Pour arrêter : ferme la fenêtre (ou `Ctrl + C`).
 
 Les étapes ci-dessous détaillent ce que fait le lanceur, si tu préfères tout

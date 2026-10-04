@@ -30,10 +30,28 @@ python -m pip install -q -r requirements.txt
 [ -f .env ] || cp .env.example .env
 if grep -q "mets-ta-cle-ici" .env; then
   echo
-  echo "Il faut mettre ta clé API dans le fichier .env."
-  echo "L'éditeur va s'ouvrir : remplace « mets-ta-cle-ici » par ta clé, enregistre et quitte."
-  read -r -p "Appuie sur Entrée pour ouvrir l'éditeur..." _
-  "${EDITOR:-nano}" .env
+  echo "Il faut ta clé API Anthropic (créée sur https://console.anthropic.com, rubrique « API Keys »)."
+  # -s : la clé ne s'affiche pas à l'écran pendant que tu la colles.
+  read -r -s -p "Colle ta clé ici puis appuie sur Entrée (rien ne s'affiche, c'est normal) : " CLE
+  echo
+  if [ -z "$CLE" ]; then
+    echo "Aucune clé saisie. Relance le lanceur quand tu l'auras."
+    exit 1
+  fi
+  # Remplace la ligne de la clé dans .env (sans afficher la clé).
+  CLE="$CLE" python - <<'PY'
+import os, pathlib
+fichier = pathlib.Path(".env")
+lignes = [
+    "ANTHROPIC_API_KEY=" + os.environ["CLE"].strip()
+    if ligne.startswith("ANTHROPIC_API_KEY=") else ligne
+    for ligne in fichier.read_text(encoding="utf-8").splitlines()
+]
+fichier.write_text("\n".join(lignes) + "\n", encoding="utf-8")
+PY
+  unset CLE
+  chmod 600 .env  # seul ton compte peut lire ce fichier
+  echo "Clé enregistrée dans .env (ce fichier n'est jamais envoyé sur GitHub)."
 fi
 
 # --- 5. Ouvrir le navigateur dans 3 secondes, puis démarrer le serveur ---
